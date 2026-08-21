@@ -745,4 +745,19 @@ PANDUAN:
             return BadRequest(ApiResponse<object>.Gagal(ex.Message));
         }
     }
+
+    [HttpGet("images/{fileId}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetImage(string fileId, [FromServices] IGoogleDriveService driveService)
+    {
+        try
+        {
+            var stream = await driveService.DownloadFileAsync(fileId);
+            return File(stream, "image/jpeg");
+        }
+        catch (Exception)
+        {
+            return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Image not found." });
+        }
+    }
 }

@@ -549,12 +549,6 @@ public class DocumentService : IDocumentService
 
         if (extractedImages.Any())
         {
-            var imagesDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "Images", document.Id.ToString());
-            if (!Directory.Exists(imagesDirectory))
-            {
-                Directory.CreateDirectory(imagesDirectory);
-            }
-
             var oldImages = _dbContext.DocumentImages.Where(di => di.DocumentId == document.Id);
             _dbContext.DocumentImages.RemoveRange(oldImages);
 
@@ -562,10 +556,9 @@ public class DocumentService : IDocumentService
             foreach (var img in extractedImages)
             {
                 var imgFileName = $"p{img.PageNumber}_{imgIndex}_{Guid.NewGuid():N}.{img.Extension}";
-                var imgFullPath = Path.Combine(imagesDirectory, imgFileName);
-                await File.WriteAllBytesAsync(imgFullPath, img.ImageBytes);
-
-                var relativeUrl = $"/uploads/images/{document.Id}/{imgFileName}";
+                
+                var driveFileId = await _driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType);
+                var driveUrl = $"/api/Documents/images/{driveFileId}";
 
                 var docImage = new DocumentImage
                 {
@@ -573,7 +566,7 @@ public class DocumentService : IDocumentService
                     DocumentId = document.Id,
                     PageNumber = img.PageNumber,
                     FileName = imgFileName,
-                    FilePath = relativeUrl,
+                    FilePath = driveUrl,
                     MimeType = img.MimeType,
                     Width = img.Width,
                     Height = img.Height,
@@ -588,7 +581,7 @@ public class DocumentService : IDocumentService
             }
 
             await _dbContext.SaveChangesAsync();
-            _logger.LogInformation("Reprocessed {Count} images for document {DocumentId}", extractedImages.Count, documentId);
+            _logger.LogInformation("Reprocessed {Count} images for document {DocumentId} and uploaded to Drive", extractedImages.Count, documentId);
         }
 
         return extractedImages.Count;

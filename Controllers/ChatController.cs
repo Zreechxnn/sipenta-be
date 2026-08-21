@@ -281,7 +281,15 @@ PANDUAN:
                 foreach (var img in relevantImages)
                 {
                     var captionText = !string.IsNullOrWhiteSpace(img.Caption) ? $" (Keterangan: {img.Caption})" : "";
-                    contextBuilder.AppendLine($"- [Halaman {img.PageNumber}]: {img.FilePath}{captionText}");
+                    
+                    var displayPath = img.FilePath;
+                    if (displayPath != null && displayPath.StartsWith("https://drive.google.com/uc?id="))
+                    {
+                        var fileId = displayPath.Replace("https://drive.google.com/uc?id=", "");
+                        displayPath = $"/api/Documents/images/{fileId}";
+                    }
+                    
+                    contextBuilder.AppendLine($"- [Halaman {img.PageNumber}]: {displayPath}{captionText}");
                 }
             }
 
@@ -302,7 +310,7 @@ PANDUAN MENJAWAB:
     - Gunakan bullet points (-) atau penomoran untuk merinci progres/poin penting.
     - Tebalkan (**kata kunci / nama / tanggal / status**) agar mudah dibaca cepat.
 5. **Gambar / Foto Dokumentasi Kegiatan**:
-    - Jika pada bagian GAMBAR DOKUMENTASI terdapat gambar yang relevan dengan kegiatan yang Anda jelaskan, sertakan gambar tersebut dalam format Markdown `![Foto Dokumentasi](/uploads/images/...)` (isikan path URL-nya secara langsung di dalam kurung tanpa kata 'URL=' atau embel-embel lain).
+    - Jika pada bagian GAMBAR DOKUMENTASI terdapat gambar yang relevan dengan kegiatan yang Anda jelaskan, sertakan gambar tersebut dalam format Markdown `![Foto Dokumentasi](<path_yang_diberikan>)` (isikan path URL-nya secara langsung di dalam kurung dari bagian GAMBAR DOKUMENTASI).
 6. **Kepatuhan Dokumen (Anti-Halusinasi)**:
     - Jawaban harus berlandaskan pada KONTEKS DOKUMEN di bawah.
     - JANGAN mengarang laporan, progres, atau pencapaian di luar dokumen.
