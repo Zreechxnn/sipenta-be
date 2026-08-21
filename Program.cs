@@ -152,7 +152,7 @@ builder.Services.AddCors(options =>
         var allowedOrigins = new List<string>
         {
             "https://siap-fe.rechanpage.my.id",
-            "https://sipenta-fe.vercel.app/",
+            "https://sipenta-fe.vercel.app",
             "http://localhost:3000"
         };
 
