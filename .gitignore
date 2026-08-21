@@ -1,0 +1,47 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDEs and Tools
+.vs/
+.vscode/
+.idea/
+
+# Environment and Configs
+.env
+appsettings.Development.json
+
+# Local databases
+app.db
+app.db-shm
+app.db-wal
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.sql
+
+# Logs
+[Ll]og/
+[Ll]ogs/
+*.log
+
+# App specific / Scratch files
+Uploads/
+graphify-out/
+next.md
+ok.md
+y.md
+test_chunk.csx
+
+
+test.pdf
+login.json
+be.md
