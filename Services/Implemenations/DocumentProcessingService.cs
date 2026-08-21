@@ -199,12 +199,6 @@ public class DocumentProcessingService : BackgroundService
 
                         if (extractedImages.Any())
                         {
-                            var imagesDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "Images", document.Id.ToString());
-                            if (!Directory.Exists(imagesDirectory))
-                            {
-                                Directory.CreateDirectory(imagesDirectory);
-                            }
-
                             // Clean old images if any
                             var oldImages = dbContext.DocumentImages.Where(di => di.DocumentId == document.Id);
                             dbContext.DocumentImages.RemoveRange(oldImages);
@@ -213,10 +207,12 @@ public class DocumentProcessingService : BackgroundService
                             foreach (var img in extractedImages)
                             {
                                 var imgFileName = $"p{img.PageNumber}_{imgIndex}_{Guid.NewGuid():N}.{img.Extension}";
-                                var imgFullPath = Path.Combine(imagesDirectory, imgFileName);
-                                await File.WriteAllBytesAsync(imgFullPath, img.ImageBytes, stoppingToken);
-
-                                var relativeUrl = $"/uploads/images/{document.Id}/{imgFileName}";
+                                
+                                // Upload image to Google Drive
+                                var driveFileId = await driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType);
+                                
+                                // Format standard embed for Google Drive images via proxy endpoint
+                                var driveUrl = $"/api/Documents/images/{driveFileId}";
 
                                 var docImage = new DocumentImage
                                 {
@@ -224,7 +220,7 @@ public class DocumentProcessingService : BackgroundService
                                     DocumentId = document.Id,
                                     PageNumber = img.PageNumber,
                                     FileName = imgFileName,
-                                    FilePath = relativeUrl,
+                                    FilePath = driveUrl, // Save Drive URL instead of local relative URL
                                     MimeType = img.MimeType,
                                     Width = img.Width,
                                     Height = img.Height,
@@ -239,7 +235,7 @@ public class DocumentProcessingService : BackgroundService
                             }
 
                             await dbContext.SaveChangesAsync(stoppingToken);
-                            _logger.LogInformation("Successfully extracted {Count} images from document {DocumentId} via iText 7.", extractedImages.Count, documentId);
+                            _logger.LogInformation("Successfully extracted {Count} images from document {DocumentId} via iText 7 and uploaded to Drive.", extractedImages.Count, documentId);
                         }
                     }
                     catch (Exception ex)

@@ -33,6 +33,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 {
     private readonly DriveService _driveService;
     private readonly string _folderId;
+    private readonly string _imageFolderId;
     private readonly ILogger<GoogleDriveService> _logger;
 
     public GoogleDriveService(IConfiguration config, ILogger<GoogleDriveService> logger)
@@ -42,6 +43,8 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         var tokenJson = config["GoogleDrive:TokenJson"] ?? config["GoogleDrive__TokenJson"];
         _folderId = config["GoogleDrive:FolderId"] ?? config["GoogleDrive__FolderId"] 
                     ?? throw new ArgumentNullException("GoogleDrive__FolderId configuration is missing.");
+                    
+        _imageFolderId = config["GoogleDrive:Folder_image"] ?? config["GoogleDrive__Folder_image"];
 
         if (string.IsNullOrEmpty(tokenJson))
         {
@@ -106,6 +109,32 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         if (progress.Status == Google.Apis.Upload.UploadStatus.Failed)
         {
             _logger.LogError(progress.Exception, "Upload to Google Drive failed.");
+            throw progress.Exception;
+        }
+
+        var fileResult = request.ResponseBody;
+        return fileResult.Id;
+    }
+
+    public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string folderId = null)
+    {
+        var targetFolder = !string.IsNullOrEmpty(folderId) ? folderId : 
+                          (!string.IsNullOrEmpty(_imageFolderId) ? _imageFolderId : _folderId);
+                          
+        var fileMetadata = new Google.Apis.Drive.v3.Data.File()
+        {
+            Name = fileName,
+            Parents = new List<string> { targetFolder }
+        };
+
+        using var stream = new MemoryStream(fileBytes);
+        var request = _driveService.Files.Create(fileMetadata, stream, contentType);
+        request.Fields = "id";
+        
+        var progress = await request.UploadAsync();
+        if (progress.Status == Google.Apis.Upload.UploadStatus.Failed)
+        {
+            _logger.LogError(progress.Exception, "Upload bytes to Google Drive failed.");
             throw progress.Exception;
         }
 
