@@ -65,4 +65,18 @@ public class UserRepository : IUserRepository
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
     }
+
+    public async Task<IEnumerable<User>> SearchAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<User>();
+
+        return await _context.Users
+            .Include(u => u.Role)
+            .Include(u => u.Bidang)
+            .Where(u => u.Username.Contains(query) || (u.FullName != null && u.FullName.Contains(query)))
+            .OrderBy(u => u.Username)
+            .Take(20)
+            .ToListAsync();
+    }
 }

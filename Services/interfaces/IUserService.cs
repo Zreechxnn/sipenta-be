@@ -12,4 +12,5 @@ public interface IUserService
     Task<UserDto> GetProfileAsync(Guid userId);
     Task<UserDto> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
     Task<UserDto> ApproveUserAsync(Guid id, ApproveUserRequest request);
+    Task<IEnumerable<UserDto>> SearchUsersAsync(string query);
 }

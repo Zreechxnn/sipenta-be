@@ -178,4 +178,18 @@ public class UserController : ControllerBase
             return NotFound(new { message = ex.Message });
         }
     }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> SearchUsers([FromQuery] string query)
+    {
+        try
+        {
+            var users = await _userService.SearchUsersAsync(query);
+            return Ok(users);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }

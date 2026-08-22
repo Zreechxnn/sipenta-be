@@ -27,7 +27,7 @@ app.db-wal
 *.db
 *.db3
 *.sql
-*.pd
+*.pdf
 
 # Logs
 [Ll]og/

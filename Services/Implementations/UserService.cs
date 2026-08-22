@@ -251,4 +251,10 @@ public class UserService : IUserService
             CreatedAt = user.CreatedAt
         };
     }
+
+    public async Task<IEnumerable<UserDto>> SearchUsersAsync(string query)
+    {
+        var users = await _userRepository.SearchAsync(query);
+        return users.Select(user => MapToDto(user));
+    }
 }

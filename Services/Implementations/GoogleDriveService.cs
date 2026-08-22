@@ -33,7 +33,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 {
     private readonly DriveService _driveService;
     private readonly string _folderId;
-    private readonly string _imageFolderId;
+    private readonly string? _imageFolderId;
     private readonly ILogger<GoogleDriveService> _logger;
 
     public GoogleDriveService(IConfiguration config, ILogger<GoogleDriveService> logger)
@@ -116,7 +116,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         return fileResult.Id;
     }
 
-    public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string folderId = null)
+    public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string? folderId = null)
     {
         var targetFolder = !string.IsNullOrEmpty(folderId) ? folderId : 
                           (!string.IsNullOrEmpty(_imageFolderId) ? _imageFolderId : _folderId);
