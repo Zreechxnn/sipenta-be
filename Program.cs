@@ -190,9 +190,10 @@ builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkService, 
 
 // Services
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
-builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IPdfImageExtractor, PdfImageExtractor>();
 builder.Services.AddScoped<IDocumentDetectionService, DocumentDetectionService>();
 builder.Services.AddScoped<IOcrProvider, TesseractOcrProvider>();

@@ -331,7 +331,100 @@ public class DocumentProcessingService : BackgroundService
 
     private async Task ExtractMetadataWithLlmAsync(Document document, IServiceProvider serviceProvider, CancellationToken stoppingToken)
     {
-        // LLM extraction is skipped for expert reports since fields are filled manually.
-        await Task.CompletedTask;
+        if (document.Content == null || string.IsNullOrWhiteSpace(document.Content.RawText)) return;
+
+        try
+        {
+            var llmService = serviceProvider.GetRequiredService<IGroqService>();
+            var logger = serviceProvider.GetRequiredService<ILogger<DocumentProcessingService>>();
+            
+            // Limit text size to prevent token limits
+            var rawText = document.Content.RawText;
+            if (rawText.Length > 10000)
+            {
+                rawText = rawText.Substring(0, 10000); // Send first 10,000 chars
+            }
+
+            var prompt = $@"
+Anda adalah asisten AI yang bertugas mengekstrak metadata dari dokumen laporan.
+Berikut adalah teks awal dari dokumen laporan (maksimal 10000 karakter):
+
+{rawText}
+
+Tolong ekstrak informasi berikut dan kembalikan HANYA dalam format JSON baku (tanpa markdown, tanpa blok kode ```, langsung objek JSON):
+{{
+  ""namaTenagaAhli"": ""..."", // Nama lengkap tenaga ahli
+  ""jenisDokumen"": ""..."", // Contoh: Laporan Bulanan, Laporan Mingguan, Laporan Akhir, dll.
+  ""periodeLaporan"": ""..."", // Periode yang tercakup, contoh: Januari 2026
+  ""judulLaporan"": ""..."" // Buat judul laporan yang ringkas, contoh: Laporan Bulanan Januari 2026
+}}
+Jika ada data yang tidak ditemukan, beri string kosong """".
+";
+
+            logger.LogInformation("Sending text to LLM for metadata extraction for document {DocumentId}", document.Id);
+            
+            var result = await llmService.GetChatCompletionAsync(
+                "Anda adalah AI pengekstrak metadata laporan. Selalu jawab dengan JSON.", 
+                prompt, 
+                stoppingToken
+            );
+
+            if (!string.IsNullOrWhiteSpace(result))
+            {
+                // Clean up result if it has markdown formatting
+                var cleanJson = result.Trim();
+                if (cleanJson.StartsWith("```json"))
+                {
+                    cleanJson = cleanJson.Substring(7);
+                    if (cleanJson.EndsWith("```")) cleanJson = cleanJson.Substring(0, cleanJson.Length - 3);
+                }
+                else if (cleanJson.StartsWith("```"))
+                {
+                    cleanJson = cleanJson.Substring(3);
+                    if (cleanJson.EndsWith("```")) cleanJson = cleanJson.Substring(0, cleanJson.Length - 3);
+                }
+                cleanJson = cleanJson.Trim();
+
+                var jsonDoc = System.Text.Json.JsonDocument.Parse(cleanJson);
+                var root = jsonDoc.RootElement;
+
+                var nama = root.TryGetProperty("namaTenagaAhli", out var namaProp) ? namaProp.GetString() : null;
+                var jenis = root.TryGetProperty("jenisDokumen", out var jenisProp) ? jenisProp.GetString() : null;
+                var periode = root.TryGetProperty("periodeLaporan", out var perProp) ? perProp.GetString() : null;
+                var judul = root.TryGetProperty("judulLaporan", out var judulProp) ? judulProp.GetString() : null;
+
+                bool modified = false;
+                if (!string.IsNullOrWhiteSpace(nama) && string.IsNullOrWhiteSpace(document.NamaTenagaAhli))
+                {
+                    document.NamaTenagaAhli = nama.Trim();
+                    modified = true;
+                }
+                if (!string.IsNullOrWhiteSpace(jenis) && string.IsNullOrWhiteSpace(document.JenisDokumen))
+                {
+                    document.JenisDokumen = jenis.Trim();
+                    modified = true;
+                }
+                if (!string.IsNullOrWhiteSpace(periode) && string.IsNullOrWhiteSpace(document.PeriodeLaporan))
+                {
+                    document.PeriodeLaporan = periode.Trim();
+                    modified = true;
+                }
+                if (!string.IsNullOrWhiteSpace(judul) && (string.IsNullOrWhiteSpace(document.Nama) || document.Nama == document.NamaFile))
+                {
+                    document.Nama = judul.Trim();
+                    modified = true;
+                }
+
+                if (modified)
+                {
+                    logger.LogInformation("Successfully updated metadata via LLM for document {DocumentId}", document.Id);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            var logger = serviceProvider.GetRequiredService<ILogger<DocumentProcessingService>>();
+            logger.LogWarning(ex, "LLM Metadata extraction failed or threw an error for DocumentId {DocumentId}. Fallback to Regex will apply.", document.Id);
+        }
     }
 }

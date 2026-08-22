@@ -53,7 +53,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,user")]
+    [Authorize(Roles = "admin,user,kasubag")]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = 524_288_000, ValueCountLimit = 5000)]
     public async Task<IActionResult> Upload([FromForm] DocumentCreateDto request)
@@ -74,6 +74,12 @@ public class DocumentsController : ControllerBase
             if (!request.BidangId.HasValue && string.IsNullOrWhiteSpace(request.Bidang))
             {
                 request.BidangId = userBidangId;
+            }
+
+            var isKasubag = User.IsInRole("kasubag");
+            if (isKasubag && request.BidangId != userBidangId)
+            {
+                return StatusCode(403, ApiResponse<List<DocumentResponseDto>>.Gagal("Kasubag hanya dapat menambah dokumen di bidangnya sendiri."));
             }
 
             var result = await _service.UploadAsync(request);
@@ -292,7 +298,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "admin,user")]
+    [Authorize(Roles = "admin,user,kasubag")]
     public async Task<IActionResult> Update(string id, [FromBody] DocumentUpdateDto request)
     {
         try
@@ -312,9 +318,20 @@ public class DocumentsController : ControllerBase
             if (doc == null)
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Dokumen tidak ditemukan." });
 
-            if (!isAdmin && doc.UserId != userId.Value)
+            var isKasubag = User.IsInRole("kasubag");
+            if (!isAdmin && !isKasubag && doc.UserId != userId.Value)
             {
                 return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Hanya pemilik dokumen atau admin yang dapat mengubah dokumen ini."));
+            }
+
+            if (isKasubag && doc.BidangId != userBidangId)
+            {
+                return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Kasubag hanya dapat mengubah dokumen di bidangnya sendiri."));
+            }
+
+            if (isKasubag && ((request.BidangId.HasValue && request.BidangId.Value != userBidangId) || (!string.IsNullOrWhiteSpace(request.Bidang) && request.Bidang != userBidang)))
+            {
+                return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Kasubag tidak dapat memindahkan dokumen ke bidang lain."));
             }
 
             var result = await _service.UpdateAsync(guidId, request);
@@ -381,7 +398,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "admin,user")]
+    [Authorize(Roles = "admin,user,kasubag")]
     public async Task<IActionResult> Delete(string id)
     {
         try
@@ -401,9 +418,15 @@ public class DocumentsController : ControllerBase
             if (doc == null)
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Dokumen tidak ditemukan." });
 
-            if (!isAdmin && doc.UserId != userId.Value)
+            var isKasubag = User.IsInRole("kasubag");
+            if (!isAdmin && !isKasubag && doc.UserId != userId.Value)
             {
-                return StatusCode(403, ApiResponse<bool>.Gagal("Hanya pemilik dokumen atau admin yang dapat menghapus dokumen ini."));
+                return StatusCode(403, ApiResponse<bool>.Gagal("Hanya pemilik dokumen, admin, atau kasubag yang dapat menghapus dokumen ini."));
+            }
+
+            if (isKasubag && doc.BidangId != userBidangId)
+            {
+                return StatusCode(403, ApiResponse<bool>.Gagal("Kasubag hanya dapat menghapus dokumen di bidangnya sendiri."));
             }
 
             await _service.DeleteAsync(guidId);
