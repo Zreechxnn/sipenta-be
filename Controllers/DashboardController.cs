@@ -8,7 +8,7 @@ namespace SIAP.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "admin")]
+[Authorize(Roles = "super-admin")]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboardService;

@@ -55,7 +55,7 @@ public class DocumentRepository : IDocumentRepository
             var uId = userId.Value;
             query = query.Where(x => 
                 x.UserId == uId || 
-                (userBidangId.HasValue && x.BidangId == userBidangId.Value) || 
+                (userBidangId.HasValue && (x.BidangId == userBidangId.Value || (x.BidangId == null && x.User != null && x.User.BidangId == userBidangId.Value))) || 
                 x.Accesses.Any(a => a.UserId == uId));
         }
 
@@ -109,12 +109,15 @@ public class DocumentRepository : IDocumentRepository
     {
         if (isAdmin) return true;
 
-        return await _context.Documents.AnyAsync(d => 
-            d.Id == documentId && (
-                d.UserId == userId || 
-                (userBidangId.HasValue && d.BidangId == userBidangId.Value) || 
-                d.Accesses.Any(a => a.UserId == userId)
-            ));
+        return await _context.Documents
+            .Include(d => d.User)
+            .Include(d => d.Accesses)
+            .AnyAsync(d => 
+                d.Id == documentId && (
+                    d.UserId == userId || 
+                    (userBidangId.HasValue && (d.BidangId == userBidangId.Value || (d.BidangId == null && d.User != null && d.User.BidangId == userBidangId.Value))) || 
+                    d.Accesses.Any(a => a.UserId == userId)
+                ));
     }
 
     public async Task<List<DocumentAccess>> GetDocumentAccessesAsync(Guid documentId)
@@ -276,15 +279,21 @@ public class DocumentRepository : IDocumentRepository
         var query = _context.DocumentChunks
             .Include(c => c.Document)
                 .ThenInclude(d => d!.Bidang)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.User)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.Accesses)
             .AsQueryable();
 
         if (!isAdmin && userId.HasValue)
         {
             var uId = userId.Value;
             query = query.Where(c => 
-                c.Document.UserId == uId || 
-                (userBidangId.HasValue && c.Document.BidangId == userBidangId.Value) || 
-                _context.DocumentAccesses.Any(da => da.DocumentId == c.DocumentId && da.UserId == uId));
+                c.Document != null && (
+                    c.Document.UserId == uId || 
+                    (userBidangId.HasValue && (c.Document.BidangId == userBidangId.Value || (c.Document.BidangId == null && c.Document.User != null && c.Document.User.BidangId == userBidangId.Value))) || 
+                    c.Document.Accesses.Any(a => a.UserId == uId)
+                ));
         }
 
         // 1. Try AND logic first
@@ -318,15 +327,21 @@ public class DocumentRepository : IDocumentRepository
         var query = _context.DocumentChunks
             .Include(c => c.Document)
                 .ThenInclude(d => d!.Bidang)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.User)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.Accesses)
             .AsQueryable();
 
         if (!isAdmin && userId.HasValue)
         {
             var uId = userId.Value;
             query = query.Where(c => 
-                c.Document.UserId == uId || 
-                (userBidangId.HasValue && c.Document.BidangId == userBidangId.Value) || 
-                _context.DocumentAccesses.Any(da => da.DocumentId == c.DocumentId && da.UserId == uId));
+                c.Document != null && (
+                    c.Document.UserId == uId || 
+                    (userBidangId.HasValue && (c.Document.BidangId == userBidangId.Value || (c.Document.BidangId == null && c.Document.User != null && c.Document.User.BidangId == userBidangId.Value))) || 
+                    c.Document.Accesses.Any(a => a.UserId == uId)
+                ));
         }
 
         // 1. Vector Search

@@ -173,8 +173,9 @@ PANDUAN:
             var dbUser = await _dbContext.Users.Include(u => u.Role).Include(u => u.Bidang).FirstOrDefaultAsync(u => u.Id == userId);
             if (dbUser == null) return Unauthorized(ApiResponse<object>.Gagal("Pengguna tidak ditemukan."));
 
-            var isAdmin = dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase);
-            if (!isAdmin && !dbUser.IsApproved)
+            var isSuperAdmin = dbUser.Role.Name.Equals("super-admin", StringComparison.OrdinalIgnoreCase);
+            var isPrivileged = isSuperAdmin || dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase) || dbUser.Role.Name.Equals("kasubag", StringComparison.OrdinalIgnoreCase);
+            if (!isPrivileged && !dbUser.IsApproved)
             {
                 return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag dan penentuan bidang."));
             }
@@ -182,7 +183,7 @@ PANDUAN:
             var topK = request.TopK <= 0 ? 12 : request.TopK;
             var embedding = await _embeddingService.GenerateEmbeddingAsync(searchQuery);
 
-            var results = await _repository.SearchHybridAsync(searchQuery, embedding, topK, userId, dbUser.BidangId, isAdmin);
+            var results = await _repository.SearchHybridAsync(searchQuery, embedding, topK, userId, dbUser.BidangId, isSuperAdmin);
 
             var docIds = results.Where(chunk => chunk.Document != null).Select(chunk => chunk.DocumentId).Distinct().ToList();
 
@@ -268,9 +269,10 @@ PANDUAN:
             foreach (var chunk in results)
             {
                 var docTitle = chunk.Document?.Nama ?? "Dokumen Tanpa Judul";
+                var tenagaAhli = chunk.Document?.NamaTenagaAhli ?? "Tidak Diketahui";
                 var bidangNama = chunk.Document?.Bidang?.Nama;
                 var bidangInfo = !string.IsNullOrEmpty(bidangNama) ? $" [Bidang: {bidangNama}]" : "";
-                contextBuilder.AppendLine($"[Dokumen: {docTitle}{bidangInfo}]");
+                contextBuilder.AppendLine($"[Dokumen: {docTitle} | Tenaga Ahli: {tenagaAhli}{bidangInfo}]");
                 contextBuilder.AppendLine(chunk.Content);
                 contextBuilder.AppendLine("---");
             }
@@ -297,8 +299,9 @@ PANDUAN:
 Tugas Anda adalah membantu pimpinan dan pengguna untuk menelusuri, mengevaluasi, dan menyimpulkan laporan kerja tenaga ahli berdasarkan dokumen yang ada dengan ringkas, teliti, dan akurat.
 
 PANDUAN MENJAWAB:
-1. **Pemeriksaan Tanggal & Detail Secara Menyeluruh**:
-   - Teliti seluruh tanggal dan uraian kegiatan yang tercantum pada KONTEKS DOKUMEN di bawah.
+1. **Pemeriksaan Tanggal, Nama, & Detail Secara Menyeluruh**:
+   - Teliti seluruh nama tenaga ahli, tanggal, dan uraian kegiatan yang tercantum pada KONTEKS DOKUMEN di bawah. Perhatikan header [Dokumen: ... | Tenaga Ahli: ...] untuk mengetahui dokumen tersebut milik siapa.
+   - Jika pengguna menanyakan kegiatan seseorang (misalnya 'Angel' atau 'Firman'), pastikan Anda membaca header Tenaga Ahli untuk mencocokkannya, walaupun nama tersebut mungkin tidak disebut lagi di dalam teks laporannya.
    - Jika pengguna menanyakan kegiatan pada tanggal atau periode tertentu (misalnya tanggal 5 Mei), telusuri dengan teliti apakah ada kegiatan atau tugas rutin pada tanggal/hari tersebut di dalam dokumen.
 2. **Ringkas, Padat, & Tuntas**:
     - Berikan jawaban yang to the point dan tidak bertele-tele.
