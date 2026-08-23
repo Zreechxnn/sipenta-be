@@ -199,28 +199,25 @@ public class DocumentProcessingService : BackgroundService
 
                         if (extractedImages.Any())
                         {
-                            // Clean old images if any
                             var oldImages = dbContext.DocumentImages.Where(di => di.DocumentId == document.Id);
                             dbContext.DocumentImages.RemoveRange(oldImages);
 
-                            int imgIndex = 1;
-                            foreach (var img in extractedImages)
+                            // Upload images to Google Drive concurrently to drastically speed up processing
+                            var uploadTasks = extractedImages.Select(async (img, index) => 
                             {
+                                var imgIndex = index + 1;
                                 var imgFileName = $"p{img.PageNumber}_{imgIndex}_{Guid.NewGuid():N}.{img.Extension}";
                                 
-                                // Upload image to Google Drive
                                 var driveFileId = await driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType);
-                                
-                                // Format standard embed for Google Drive images via proxy endpoint
                                 var driveUrl = $"/api/Documents/images/{driveFileId}";
 
-                                var docImage = new DocumentImage
+                                return new DocumentImage
                                 {
                                     Id = Guid.NewGuid(),
                                     DocumentId = document.Id,
                                     PageNumber = img.PageNumber,
                                     FileName = imgFileName,
-                                    FilePath = driveUrl, // Save Drive URL instead of local relative URL
+                                    FilePath = driveUrl,
                                     MimeType = img.MimeType,
                                     Width = img.Width,
                                     Height = img.Height,
@@ -229,10 +226,10 @@ public class DocumentProcessingService : BackgroundService
                                     ContextText = img.PageText,
                                     CreatedAt = DateTime.UtcNow
                                 };
+                            });
 
-                                dbContext.DocumentImages.Add(docImage);
-                                imgIndex++;
-                            }
+                            var docImages = await Task.WhenAll(uploadTasks);
+                            dbContext.DocumentImages.AddRange(docImages);
 
                             await dbContext.SaveChangesAsync(stoppingToken);
                             _logger.LogInformation("Successfully extracted {Count} images from document {DocumentId} via iText 7 and uploaded to Drive.", extractedImages.Count, documentId);
@@ -338,16 +335,16 @@ public class DocumentProcessingService : BackgroundService
             var llmService = serviceProvider.GetRequiredService<IGroqService>();
             var logger = serviceProvider.GetRequiredService<ILogger<DocumentProcessingService>>();
             
-            // Limit text size to prevent token limits
+            // Limit text size to prevent token limits and speed up generation
             var rawText = document.Content.RawText;
-            if (rawText.Length > 10000)
+            if (rawText.Length > 3000)
             {
-                rawText = rawText.Substring(0, 10000); // Send first 10,000 chars
+                rawText = rawText.Substring(0, 3000); // Send first 3,000 chars (usually covers cover page & TOC)
             }
 
             var prompt = $@"
 Anda adalah asisten AI yang bertugas mengekstrak metadata dari dokumen laporan.
-Berikut adalah teks awal dari dokumen laporan (maksimal 10000 karakter):
+Berikut adalah teks awal dari dokumen laporan (maksimal 3000 karakter):
 
 {rawText}
 

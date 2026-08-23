@@ -73,20 +73,42 @@ public class UserController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "super-admin,admin,kasubag")]
     public async Task<IActionResult> GetAllUsers()
     {
         var users = await _userService.GetAllUsersAsync();
+        
+        if (User.IsInRole("kasubag"))
+        {
+            var bidangClaim = User.FindFirst("bidangId")?.Value;
+            if (int.TryParse(bidangClaim, out int bidangId))
+            {
+                users = users.Where(u => u.BidangId == bidangId);
+            }
+            else
+            {
+                return Forbid();
+            }
+        }
+        
         return Ok(users);
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "super-admin,admin,kasubag")]
     public async Task<IActionResult> GetUserById(Guid id)
     {
         try
         {
             var user = await _userService.GetUserByIdAsync(id);
+            if (User.IsInRole("kasubag"))
+            {
+                var bidangClaim = User.FindFirst("bidangId")?.Value;
+                if (!int.TryParse(bidangClaim, out int bidangId) || user.BidangId != bidangId)
+                {
+                    return Forbid();
+                }
+            }
             return Ok(user);
         }
         catch (KeyNotFoundException ex)
@@ -96,11 +118,29 @@ public class UserController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "super-admin,admin,kasubag")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
         try
         {
+            if (User.IsInRole("kasubag"))
+            {
+                var bidangClaim = User.FindFirst("bidangId")?.Value;
+                if (!int.TryParse(bidangClaim, out int bidangId) || request.BidangId != bidangId)
+                {
+                    return Forbid("Kasubag hanya bisa membuat user di bidangnya sendiri.");
+                }
+            }
+
+            // Only super-admin can assign admin (2) or super-admin (4) role
+            if (request.RoleId == 2 || request.RoleId == 4)
+            {
+                if (!User.IsInRole("super-admin"))
+                {
+                    return Forbid("Hanya super-admin yang bisa menetapkan hak akses sebagai admin.");
+                }
+            }
+
             var user = await _userService.CreateUserAsync(request);
 
             // Broadcast SignalR event
@@ -115,11 +155,30 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "super-admin,admin,kasubag")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request)
     {
         try
         {
+            var existingUser = await _userService.GetUserByIdAsync(id);
+            if (User.IsInRole("kasubag"))
+            {
+                var bidangClaim = User.FindFirst("bidangId")?.Value;
+                if (!int.TryParse(bidangClaim, out int bidangId) || existingUser.BidangId != bidangId || (request.BidangId.HasValue && request.BidangId != bidangId))
+                {
+                    return Forbid("Kasubag hanya bisa mengubah user di bidangnya sendiri.");
+                }
+            }
+
+            // Only super-admin can assign admin (2) or super-admin (4) role
+            if (request.RoleId.HasValue && (request.RoleId.Value == 2 || request.RoleId.Value == 4))
+            {
+                if (!User.IsInRole("super-admin"))
+                {
+                    return Forbid("Hanya super-admin yang bisa menetapkan hak akses sebagai admin.");
+                }
+            }
+
             var user = await _userService.UpdateUserAsync(id, request);
 
             // Broadcast SignalR event
@@ -138,11 +197,20 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("{id}/approve")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "super-admin,admin,kasubag")]
     public async Task<IActionResult> ApproveUser(Guid id, [FromBody] ApproveUserRequest request)
     {
         try
         {
+            if (User.IsInRole("kasubag"))
+            {
+                var bidangClaim = User.FindFirst("bidangId")?.Value;
+                if (!int.TryParse(bidangClaim, out int bidangId) || request.BidangId != bidangId)
+                {
+                    return Forbid("Kasubag hanya bisa menyetujui user untuk bidangnya sendiri.");
+                }
+            }
+
             var user = await _userService.ApproveUserAsync(id, request);
 
             // Broadcast SignalR event
@@ -161,11 +229,21 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "super-admin,admin,kasubag")]
     public async Task<IActionResult> DeleteUser(Guid id)
     {
         try
         {
+            var existingUser = await _userService.GetUserByIdAsync(id);
+            if (User.IsInRole("kasubag"))
+            {
+                var bidangClaim = User.FindFirst("bidangId")?.Value;
+                if (!int.TryParse(bidangClaim, out int bidangId) || existingUser.BidangId != bidangId)
+                {
+                    return Forbid();
+                }
+            }
+
             await _userService.DeleteUserAsync(id);
 
             // Broadcast SignalR event

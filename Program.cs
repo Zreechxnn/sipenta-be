@@ -13,6 +13,8 @@ using SIAP.Api.Services.Interfaces;
 using SIAP.Api.Services.Implemenations;
 using SIAP.Api.Services.Implementations;
 using SIAP.Api.Hubs;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -202,6 +204,29 @@ builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>();
 builder.Services.AddSingleton<IDocumentProcessingQueue, DocumentProcessingQueue>();
 builder.Services.AddHostedService<DocumentProcessingService>();
 
+// Rate Limiting Config
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User.Identity?.Name ?? httpContext.Request.Headers.Host.ToString(),
+            factory: partition => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 100, // 100 requests
+                QueueLimit = 2,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                Window = TimeSpan.FromSeconds(10) // per 10 seconds
+            }));
+    
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = 429;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync("{\"message\": \"Terlalu banyak permintaan (Rate limit exceeded). Silakan coba lagi nanti.\"}", token);
+    };
+});
+
 var app = builder.Build();
 
 // Static file serving for extracted document images
@@ -219,6 +244,26 @@ app.UseStaticFiles(new StaticFileOptions
 
 // Middleware global
 app.UseCors("AllowAll");
+
+// HTTPS Redirection & HSTS
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+app.UseHttpsRedirection();
+
+// Security Headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; connect-src 'self' wss: https://siap-fe.rechanpage.my.id https://sipenta-fe.vercel.app; img-src 'self' data: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:; frame-ancestors 'none';";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    await next();
+});
+
+app.UseRateLimiter();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
