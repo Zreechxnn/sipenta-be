@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using SIAP.Api.Common;
 using SIAP.Api.DTOs.Documents;
 using SIAP.Api.Hubs;
@@ -71,15 +72,37 @@ public class DocumentsController : ControllerBase
                 return BadRequest(ApiResponse<List<DocumentResponseDto>>.Gagal("Tidak ada file yang diupload."));
 
             request.UserId = userId.Value;
-            if (!request.BidangId.HasValue && string.IsNullOrWhiteSpace(request.Bidang))
-            {
-                request.BidangId = userBidangId;
-            }
 
-            var isKasubag = User.IsInRole("kasubag");
-            if (isKasubag && request.BidangId != userBidangId)
+            var isSuperAdmin = User.IsInRole("super-admin");
+            if (!isSuperAdmin)
             {
-                return StatusCode(403, ApiResponse<List<DocumentResponseDto>>.Gagal("Kasubag hanya dapat menambah dokumen di bidangnya sendiri."));
+                // Untuk Admin (Kasubag) dan User (Tenaga Ahli):
+                // Dokumen HANYA dan OTOMATIS diunggah ke bidang miliknya sendiri
+                request.BidangId = userBidangId;
+                request.Bidang = userBidang;
+            }
+            else
+            {
+                // Hanya Super-Admin yang memiliki hak lintas bidang dan bisa menentukan bidang tujuan
+                if (!request.BidangId.HasValue && !string.IsNullOrWhiteSpace(request.Bidang))
+                {
+                    var b = await _dbContext.Bidangs.FirstOrDefaultAsync(x =>
+                        Microsoft.EntityFrameworkCore.EF.Functions.ILike(x.Nama, request.Bidang) ||
+                        (x.Kode != null && Microsoft.EntityFrameworkCore.EF.Functions.ILike(x.Kode, request.Bidang)) ||
+                        Microsoft.EntityFrameworkCore.EF.Functions.ILike(x.Nama, $"%{request.Bidang}%") ||
+                        (x.Kode != null && Microsoft.EntityFrameworkCore.EF.Functions.ILike(request.Bidang, $"%{x.Kode}%"))
+                    );
+                    if (b != null)
+                    {
+                        request.BidangId = b.Id;
+                    }
+                }
+
+                if (!request.BidangId.HasValue)
+                {
+                    request.BidangId = userBidangId;
+                    request.Bidang = userBidang;
+                }
             }
 
             var result = await _service.UploadAsync(request);
@@ -329,9 +352,11 @@ public class DocumentsController : ControllerBase
                 return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Kasubag hanya dapat mengubah dokumen di bidangnya sendiri."));
             }
 
-            if (isKasubag && ((request.BidangId.HasValue && request.BidangId.Value != userBidangId) || (!string.IsNullOrWhiteSpace(request.Bidang) && request.Bidang != userBidang)))
+            if (!isAdmin)
             {
-                return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Kasubag tidak dapat memindahkan dokumen ke bidang lain."));
+                // Kasubag dan User biasa tidak dapat memindahkan dokumen ke bidang lain
+                request.BidangId = doc.BidangId ?? userBidangId;
+                request.Bidang = userBidang;
             }
 
             var result = await _service.UpdateAsync(guidId, request);
