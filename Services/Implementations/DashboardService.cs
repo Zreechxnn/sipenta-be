@@ -14,17 +14,39 @@ public class DashboardService : IDashboardService
         _context = context;
     }
 
-    public async Task<DashboardSummaryDto> GetSummaryAsync()
+    public async Task<DashboardSummaryDto> GetSummaryAsync(Guid? userId = null, int? userBidangId = null, bool isAdmin = false)
     {
-        var totalUsers = await _context.Users.CountAsync();
-        var pendingUsers = await _context.Users.CountAsync(u => !u.IsApproved);
+        int totalUsers;
+        int pendingUsers;
+
+        if (isAdmin)
+        {
+            totalUsers = await _context.Users.CountAsync();
+            pendingUsers = await _context.Users.CountAsync(u => !u.IsApproved);
+        }
+        else
+        {
+            // For Kasubag / Bidang-scoped roles:
+            totalUsers = await _context.Users.CountAsync(u => u.BidangId == userBidangId);
+            pendingUsers = await _context.Users.CountAsync(u => !u.IsApproved && (u.BidangId == null || u.BidangId == userBidangId));
+        }
         
         var documentsQuery = _context.Documents.AsQueryable();
-        var totalDocuments = await documentsQuery.CountAsync();
-        
-        var totalStorage = await documentsQuery.SumAsync(d => (long)d.Ukuran);
 
-        var docsByBidang = await _context.Documents
+        // If not admin, restrict to owner documents, same Bidang documents, or explicitly shared documents
+        if (!isAdmin && userId.HasValue)
+        {
+            var uId = userId.Value;
+            documentsQuery = documentsQuery.Where(d => 
+                d.UserId == uId || 
+                (userBidangId.HasValue && (d.BidangId == userBidangId.Value || (d.BidangId == null && d.User != null && d.User.BidangId == userBidangId.Value))) || 
+                d.Accesses.Any(a => a.UserId == uId));
+        }
+
+        var totalDocuments = await documentsQuery.CountAsync();
+        var totalStorage = totalDocuments > 0 ? (await documentsQuery.Select(d => (long?)d.Ukuran).SumAsync() ?? 0) : 0;
+
+        var docsByBidang = await documentsQuery
             .Include(d => d.Bidang)
             .GroupBy(d => d.Bidang != null ? d.Bidang.Nama : "Tanpa Bidang")
             .Select(g => new DocumentsByBidangDto
@@ -34,7 +56,7 @@ public class DashboardService : IDashboardService
             })
             .ToListAsync();
 
-        var recentDocs = await _context.Documents
+        var recentDocs = await documentsQuery
             .Include(d => d.User)
             .OrderByDescending(d => d.TanggalUpload)
             .Take(5)

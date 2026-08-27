@@ -22,6 +22,39 @@ public class UserController : ControllerBase
         _hubContext = hubContext;
     }
 
+    private async Task<(Guid? userId, int? bidangId, bool isSuperAdmin, bool isBidangAdmin)> GetCurrentCallerInfoAsync()
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdStr, out var userId))
+        {
+            return (null, null, false, false);
+        }
+
+        var isSuperAdmin = User.IsInRole("super-admin");
+        var isBidangAdmin = User.IsInRole("admin") || User.IsInRole("kasubag");
+
+        int? bidangId = null;
+        var bidangClaim = User.FindFirst("bidangId")?.Value;
+        if (int.TryParse(bidangClaim, out var bId))
+        {
+            bidangId = bId;
+        }
+        else
+        {
+            try
+            {
+                var dbUser = await _userService.GetUserByIdAsync(userId);
+                bidangId = dbUser?.BidangId;
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        return (userId, bidangId, isSuperAdmin, isBidangAdmin);
+    }
+
     [HttpGet("profile")]
     [HttpGet("me")]
     public async Task<IActionResult> GetProfile()
@@ -77,13 +110,14 @@ public class UserController : ControllerBase
     public async Task<IActionResult> GetAllUsers()
     {
         var users = await _userService.GetAllUsersAsync();
+        var (_, bidangId, isSuperAdmin, _) = await GetCurrentCallerInfoAsync();
         
-        if (User.IsInRole("kasubag"))
+        if (!isSuperAdmin)
         {
-            var bidangClaim = User.FindFirst("bidangId")?.Value;
-            if (int.TryParse(bidangClaim, out int bidangId))
+            if (bidangId.HasValue)
             {
-                users = users.Where(u => u.BidangId == bidangId);
+                // Admin bidang / Kasubag hanya melihat Tenaga Ahli di bidangnya sendiri serta calon pendaftar yang belum diapprove
+                users = users.Where(u => u.BidangId == bidangId.Value || (!u.IsApproved && (u.BidangId == null || u.BidangId == bidangId.Value)));
             }
             else
             {
@@ -101,10 +135,10 @@ public class UserController : ControllerBase
         try
         {
             var user = await _userService.GetUserByIdAsync(id);
-            if (User.IsInRole("kasubag"))
+            var (_, bidangId, isSuperAdmin, _) = await GetCurrentCallerInfoAsync();
+            if (!isSuperAdmin)
             {
-                var bidangClaim = User.FindFirst("bidangId")?.Value;
-                if (!int.TryParse(bidangClaim, out int bidangId) || user.BidangId != bidangId)
+                if (!bidangId.HasValue || (user.BidangId != bidangId.Value && user.IsApproved))
                 {
                     return Forbid();
                 }
@@ -123,22 +157,22 @@ public class UserController : ControllerBase
     {
         try
         {
-            if (User.IsInRole("kasubag"))
+            var (_, bidangId, isSuperAdmin, _) = await GetCurrentCallerInfoAsync();
+            if (!isSuperAdmin)
             {
-                var bidangClaim = User.FindFirst("bidangId")?.Value;
-                if (!int.TryParse(bidangClaim, out int bidangId) || request.BidangId != bidangId)
+                if (!bidangId.HasValue)
                 {
-                    return Forbid("Kasubag hanya bisa membuat user di bidangnya sendiri.");
+                    return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
                 }
-            }
 
-            // Only super-admin can assign admin (2) or super-admin (4) role
-            if (request.RoleId == 2 || request.RoleId == 4)
+                // Lock created user to Admin's bidang and 'user' (Tenaga Ahli) role
+                request.BidangId = bidangId.Value;
+                request.Bidang = null;
+                request.RoleId = 3;
+            }
+            else if (request.RoleId == 2 || request.RoleId == 4)
             {
-                if (!User.IsInRole("super-admin"))
-                {
-                    return Forbid("Hanya super-admin yang bisa menetapkan hak akses sebagai admin.");
-                }
+                // Super Admin can create admin or super-admin
             }
 
             var user = await _userService.CreateUserAsync(request);
@@ -161,21 +195,26 @@ public class UserController : ControllerBase
         try
         {
             var existingUser = await _userService.GetUserByIdAsync(id);
-            if (User.IsInRole("kasubag"))
+            var (_, bidangId, isSuperAdmin, _) = await GetCurrentCallerInfoAsync();
+            if (!isSuperAdmin)
             {
-                var bidangClaim = User.FindFirst("bidangId")?.Value;
-                if (!int.TryParse(bidangClaim, out int bidangId) || existingUser.BidangId != bidangId || (request.BidangId.HasValue && request.BidangId != bidangId))
+                if (!bidangId.HasValue)
                 {
-                    return Forbid("Kasubag hanya bisa mengubah user di bidangnya sendiri.");
+                    return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
                 }
-            }
 
-            // Only super-admin can assign admin (2) or super-admin (4) role
-            if (request.RoleId.HasValue && (request.RoleId.Value == 2 || request.RoleId.Value == 4))
-            {
-                if (!User.IsInRole("super-admin"))
+                if (existingUser.IsApproved && existingUser.BidangId != bidangId.Value)
                 {
-                    return Forbid("Hanya super-admin yang bisa menetapkan hak akses sebagai admin.");
+                    return Forbid("Admin/Kasubag hanya bisa mengubah Tenaga Ahli di bidangnya sendiri.");
+                }
+
+                // Enforce Admin's bidang
+                request.BidangId = bidangId.Value;
+                request.Bidang = null;
+
+                if (request.RoleId.HasValue && request.RoleId.Value != 3)
+                {
+                    return Forbid("Admin/Kasubag hanya dapat mengelola Tenaga Ahli.");
                 }
             }
 
@@ -202,13 +241,17 @@ public class UserController : ControllerBase
     {
         try
         {
-            if (User.IsInRole("kasubag"))
+            var (_, bidangId, isSuperAdmin, _) = await GetCurrentCallerInfoAsync();
+            if (!isSuperAdmin)
             {
-                var bidangClaim = User.FindFirst("bidangId")?.Value;
-                if (!int.TryParse(bidangClaim, out int bidangId) || request.BidangId != bidangId)
+                if (!bidangId.HasValue)
                 {
-                    return Forbid("Kasubag hanya bisa menyetujui user untuk bidangnya sendiri.");
+                    return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
                 }
+
+                // When Admin/Kasubag approves, the user AUTOMATICALLY becomes Tenaga Ahli in Admin's bidang!
+                request.BidangId = bidangId.Value;
+                request.Bidang = null;
             }
 
             var user = await _userService.ApproveUserAsync(id, request);
@@ -235,12 +278,18 @@ public class UserController : ControllerBase
         try
         {
             var existingUser = await _userService.GetUserByIdAsync(id);
-            if (User.IsInRole("kasubag"))
+            var (_, bidangId, isSuperAdmin, _) = await GetCurrentCallerInfoAsync();
+            if (!isSuperAdmin)
             {
-                var bidangClaim = User.FindFirst("bidangId")?.Value;
-                if (!int.TryParse(bidangClaim, out int bidangId) || existingUser.BidangId != bidangId)
+                if (!bidangId.HasValue)
                 {
                     return Forbid();
+                }
+
+                if ((existingUser.IsApproved && existingUser.BidangId != bidangId.Value) || 
+                    existingUser.Role == "super-admin" || existingUser.Role == "admin" || existingUser.Role == "kasubag")
+                {
+                    return Forbid("Admin/Kasubag hanya bisa menghapus Tenaga Ahli di bidangnya sendiri.");
                 }
             }
 
