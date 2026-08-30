@@ -149,8 +149,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Role>().HasData(
             new Role { Id = 1, Name = "kasubag" },
             new Role { Id = 2, Name = "admin" },
-            new Role { Id = 3, Name = "user" },
-            new Role { Id = 4, Name = "super-admin" }
+            new Role { Id = 3, Name = "user" }
         );
 
         // 3. Users (SuperAdmin & Admin)
@@ -164,7 +163,7 @@ public class AppDbContext : DbContext
                 Email = "superadmin@example.com",
                 FullName = "Super Administrator SIAP",
                 PasswordHash = "$2b$12$C0FnFmFwP8AhaBDKbwQOZ.tPOThfbDRIG2gRw8jwxCMZH2ev/Ruf6", 
-                RoleId = 4,
+                RoleId = 2,
                 BidangId = 6,
                 IsApproved = true,
                 CreatedAt = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc)

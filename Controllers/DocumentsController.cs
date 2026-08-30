@@ -38,7 +38,7 @@ public class DocumentsController : ControllerBase
 
     private async Task<(Guid? userId, int? userBidangId, string? userBidang, bool isAdmin, bool isApproved)> GetCurrentUserAsync()
     {
-        var isAdmin = User.IsInRole("admin") || User.IsInRole("super-admin");
+        var isAdmin = User.IsInRole("admin");
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdStr, out var userId))
         {
@@ -54,7 +54,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "super-admin,admin,user,kasubag")]
+    [Authorize(Roles = "admin,user,kasubag")]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = 524_288_000, ValueCountLimit = 5000)]
     public async Task<IActionResult> Upload([FromForm] DocumentCreateDto request)
@@ -73,7 +73,7 @@ public class DocumentsController : ControllerBase
 
             request.UserId = userId.Value;
 
-            var isSuperAdmin = User.IsInRole("super-admin");
+            var isSuperAdmin = User.IsInRole("admin");
             if (!isSuperAdmin)
             {
                 // Untuk Admin (Kasubag) dan User (Tenaga Ahli):
@@ -321,7 +321,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "super-admin,admin,user,kasubag")]
+    [Authorize(Roles = "admin,user,kasubag")]
     public async Task<IActionResult> Update(string id, [FromBody] DocumentUpdateDto request)
     {
         try
@@ -377,7 +377,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpGet("{id}/status")]
-    [Authorize(Roles = "super-admin,admin")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> GetStatus(string id)
     {
         try
@@ -400,7 +400,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpGet("{id}/ocr")]
-    [Authorize(Roles = "super-admin,admin")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> GetOcrStatus(string id)
     {
         try
@@ -423,7 +423,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "super-admin,admin,user,kasubag")]
+    [Authorize(Roles = "admin,user,kasubag")]
     public async Task<IActionResult> Delete(string id)
     {
         try
@@ -607,7 +607,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPut("{id}/chunks/{chunkId}")]
-    [Authorize(Roles = "super-admin,admin")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> UpdateChunk(string id, string chunkId, [FromBody] SIAP.Api.DTOs.Chunks.DocumentChunkUpdateDto request)
     {
         try
@@ -630,7 +630,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("{id}/rechunk")]
-    [Authorize(Roles = "super-admin,admin")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Rechunk(string id, [FromQuery] string? strategy)
     {
         try
@@ -653,7 +653,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("{id}/reprocess-images")]
-    [Authorize(Roles = "super-admin,admin,user")]
+    [Authorize(Roles = "admin,user")]
     public async Task<IActionResult> ReprocessImages(string id)
     {
         try

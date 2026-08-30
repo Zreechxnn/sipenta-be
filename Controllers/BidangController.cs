@@ -77,7 +77,7 @@ public class BidangController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "super-admin,admin")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Create([FromBody] CreateBidangRequest request)
     {
         try
@@ -121,7 +121,7 @@ public class BidangController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "super-admin,admin")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateBidangRequest request)
     {
         try
@@ -161,7 +161,7 @@ public class BidangController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "super-admin,admin")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Delete(int id)
     {
         try

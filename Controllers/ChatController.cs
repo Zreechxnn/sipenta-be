@@ -173,7 +173,7 @@ PANDUAN:
             var dbUser = await _dbContext.Users.Include(u => u.Role).Include(u => u.Bidang).FirstOrDefaultAsync(u => u.Id == userId);
             if (dbUser == null) return Unauthorized(ApiResponse<object>.Gagal("Pengguna tidak ditemukan."));
 
-            var isSuperAdmin = dbUser.Role.Name.Equals("super-admin", StringComparison.OrdinalIgnoreCase);
+            var isSuperAdmin = dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase);
             var isPrivileged = isSuperAdmin || dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase) || dbUser.Role.Name.Equals("kasubag", StringComparison.OrdinalIgnoreCase);
             if (!isPrivileged && !dbUser.IsApproved)
             {

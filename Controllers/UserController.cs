@@ -30,7 +30,7 @@ public class UserController : ControllerBase
             return (null, null, false, false);
         }
 
-        var isSuperAdmin = User.IsInRole("super-admin");
+        var isSuperAdmin = User.IsInRole("admin");
         var isBidangAdmin = User.IsInRole("admin") || User.IsInRole("kasubag");
 
         int? bidangId = null;
@@ -106,7 +106,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "super-admin,admin,kasubag")]
+    [Authorize(Roles = "admin,kasubag")]
     public async Task<IActionResult> GetAllUsers()
     {
         var users = await _userService.GetAllUsersAsync();
@@ -129,7 +129,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = "super-admin,admin,kasubag")]
+    [Authorize(Roles = "admin,kasubag")]
     public async Task<IActionResult> GetUserById(Guid id)
     {
         try
@@ -152,7 +152,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "super-admin,admin,kasubag")]
+    [Authorize(Roles = "admin,kasubag")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
         try
@@ -189,7 +189,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "super-admin,admin,kasubag")]
+    [Authorize(Roles = "admin,kasubag")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request)
     {
         try
@@ -236,7 +236,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("{id}/approve")]
-    [Authorize(Roles = "super-admin,admin,kasubag")]
+    [Authorize(Roles = "admin,kasubag")]
     public async Task<IActionResult> ApproveUser(Guid id, [FromBody] ApproveUserRequest request)
     {
         try
@@ -272,7 +272,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "super-admin,admin,kasubag")]
+    [Authorize(Roles = "admin,kasubag")]
     public async Task<IActionResult> DeleteUser(Guid id)
     {
         try
@@ -287,7 +287,7 @@ public class UserController : ControllerBase
                 }
 
                 if ((existingUser.IsApproved && existingUser.BidangId != bidangId.Value) || 
-                    existingUser.Role == "super-admin" || existingUser.Role == "admin" || existingUser.Role == "kasubag")
+                    existingUser.Role == "admin" || existingUser.Role == "admin" || existingUser.Role == "kasubag")
                 {
                     return Forbid("Admin/Kasubag hanya bisa menghapus Tenaga Ahli di bidangnya sendiri.");
                 }
