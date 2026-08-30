@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 using SIAP.Api.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
-namespace SIAP.Api.Services.Implemenations;
+namespace SIAP.Api.Services.Implementations;
 
 public class TesseractOcrProvider : IOcrProvider
 {
@@ -23,7 +23,6 @@ public class TesseractOcrProvider : IOcrProvider
     {
         _logger.LogInformation("[OCR] Start");
         var rawTextBuilder = new StringBuilder();
-        double totalConfidence = 0;
         int imageCount = 0;
 
         var startPosition = stream.Position;

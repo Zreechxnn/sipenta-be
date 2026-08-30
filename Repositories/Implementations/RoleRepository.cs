@@ -3,7 +3,7 @@ using SIAP.Api.Data;
 using SIAP.Api.Entities;
 using SIAP.Api.Repositories.Interfaces;
 
-namespace SIAP.Api.Repositories.Implemenations;
+namespace SIAP.Api.Repositories.Implementations;
 
 public class RoleRepository : IRoleRepository
 {

@@ -4,7 +4,7 @@ using SIAP.Api.Data;
 using SIAP.Api.Entities;
 using SIAP.Api.Repositories.Interfaces;
 
-namespace SIAP.Api.Repositories.Implemenations;
+namespace SIAP.Api.Repositories.Implementations;
 
 public class DocumentRepository : IDocumentRepository
 {
@@ -298,9 +298,9 @@ public class DocumentRepository : IDocumentRepository
 
         // 1. Try AND logic first
         var andResults = await query
-            .Where(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+            .Where(c => c.Document != null && EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
                         .Matches(EF.Functions.ToTsQuery("indonesian", tsQueryStringAnd)))
-            .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+            .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document!.Nama ?? "") + " " + (c.Document!.NamaTenagaAhli ?? "") + " " + (c.Document!.PeriodeLaporan ?? "") + " " + c.Content)
                         .Rank(EF.Functions.ToTsQuery("indonesian", tsQueryStringAnd)))
             .Take(topK)
             .ToListAsync();
@@ -312,9 +312,9 @@ public class DocumentRepository : IDocumentRepository
 
         // 2. Fallback to OR logic
         return await query
-            .Where(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+            .Where(c => c.Document != null && EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
                         .Matches(EF.Functions.ToTsQuery("indonesian", tsQueryStringOr)))
-            .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+            .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document!.Nama ?? "") + " " + (c.Document!.NamaTenagaAhli ?? "") + " " + (c.Document!.PeriodeLaporan ?? "") + " " + c.Content)
                         .Rank(EF.Functions.ToTsQuery("indonesian", tsQueryStringOr)))
             .Take(topK)
             .ToListAsync();
@@ -360,9 +360,9 @@ public class DocumentRepository : IDocumentRepository
         if (words.Any())
         {
             ftsResults = await query
-                .Where(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+                .Where(c => c.Document != null && EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
                             .Matches(EF.Functions.ToTsQuery("indonesian", tsQueryStringAnd)))
-                .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+                .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document!.Nama ?? "") + " " + (c.Document!.NamaTenagaAhli ?? "") + " " + (c.Document!.PeriodeLaporan ?? "") + " " + c.Content)
                             .Rank(EF.Functions.ToTsQuery("indonesian", tsQueryStringAnd)))
                 .Take(fetchCount)
                 .ToListAsync();
@@ -370,9 +370,9 @@ public class DocumentRepository : IDocumentRepository
             if (!ftsResults.Any())
             {
                 ftsResults = await query
-                    .Where(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+                    .Where(c => c.Document != null && EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
                                 .Matches(EF.Functions.ToTsQuery("indonesian", tsQueryStringOr)))
-                    .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document.Nama ?? "") + " " + (c.Document.NamaTenagaAhli ?? "") + " " + (c.Document.PeriodeLaporan ?? "") + " " + c.Content)
+                    .OrderByDescending(c => EF.Functions.ToTsVector("indonesian", (c.Document!.Nama ?? "") + " " + (c.Document!.NamaTenagaAhli ?? "") + " " + (c.Document!.PeriodeLaporan ?? "") + " " + c.Content)
                                 .Rank(EF.Functions.ToTsQuery("indonesian", tsQueryStringOr)))
                     .Take(fetchCount)
                     .ToListAsync();
@@ -386,8 +386,8 @@ public class DocumentRepository : IDocumentRepository
             var pattern = $"%{word}%";
             var match = await query
                 .Where(c => EF.Functions.ILike(c.Content, pattern) || 
-                            (c.Document.Nama != null && EF.Functions.ILike(c.Document.Nama, pattern)) ||
-                            (c.Document.NamaTenagaAhli != null && EF.Functions.ILike(c.Document.NamaTenagaAhli, pattern)))
+                            (c.Document != null && c.Document.Nama != null && EF.Functions.ILike(c.Document.Nama, pattern)) ||
+                            (c.Document != null && c.Document.NamaTenagaAhli != null && EF.Functions.ILike(c.Document.NamaTenagaAhli, pattern)))
                 .Take(topK)
                 .ToListAsync();
             exactMatches.AddRange(match);

@@ -20,3 +20,8 @@ public class AuthResponse
     public UserDto User { get; set; } = null!;
     public bool IsNewUser { get; set; }
 }
+
+public class GoogleLoginRequest
+{
+    public string IdToken { get; set; } = string.Empty;
+}

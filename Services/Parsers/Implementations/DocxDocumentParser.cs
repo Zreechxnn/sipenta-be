@@ -24,7 +24,7 @@ public class DocxDocumentParser : IDocumentParser
 
         using (var wordDoc = WordprocessingDocument.Open(ms, false))
         {
-            var body = wordDoc.MainDocumentPart?.Document.Body;
+            var body = wordDoc.MainDocumentPart?.Document?.Body;
             if (body != null)
             {
                 foreach (var paragraph in body.Elements<Paragraph>())

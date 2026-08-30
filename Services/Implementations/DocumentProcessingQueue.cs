@@ -1,7 +1,7 @@
 using System.Threading.Channels;
 using SIAP.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implemenations;
+namespace SIAP.Api.Services.Implementations;
 
 public class DocumentProcessingQueue : IDocumentProcessingQueue
 {
