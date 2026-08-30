@@ -10,7 +10,7 @@ namespace SIAP.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "super-admin,admin,kasubag")]
+[Authorize(Roles = "admin,kasubag")]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboardService;
@@ -27,7 +27,7 @@ public class DashboardController : ControllerBase
     {
         try
         {
-            var isAdmin = User.IsInRole("super-admin") || User.IsInRole("admin");
+            var isAdmin = User.IsInRole("admin");
             Guid? userId = null;
             int? userBidangId = null;
 
