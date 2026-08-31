@@ -108,7 +108,7 @@ public class ChatController : ControllerBase
 
         await _hubContext.Clients.All.SendAsync("ChatSessionDeleted", new { SessionId = sessionId, UserId = userId });
 
-        return Ok(ApiResponse<object>.Ok(null, "Sesi berhasil dihapus"));
+        return Ok(ApiResponse<object?>.Ok(null, "Sesi berhasil dihapus"));
     }
 
     [HttpPost]
@@ -174,7 +174,7 @@ PANDUAN:
             if (dbUser == null) return Unauthorized(ApiResponse<object>.Gagal("Pengguna tidak ditemukan."));
 
             var isSuperAdmin = dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase);
-            var isPrivileged = isSuperAdmin || dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase) || dbUser.Role.Name.Equals("kasubag", StringComparison.OrdinalIgnoreCase);
+            var isPrivileged = isSuperAdmin || dbUser.Role.Name.Equals("kasubag", StringComparison.OrdinalIgnoreCase);
             if (!isPrivileged && !dbUser.IsApproved)
             {
                 return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag dan penentuan bidang."));
@@ -358,15 +358,15 @@ KONTEKS DOKUMEN:
             // 7. Add AI response to db
             var uniqueSources = results
                 .Where(chunk => chunk.Document != null)
-                .GroupBy(chunk => new { chunk.DocumentId, chunk.Document.Nama, chunk.Document.NamaFile })
+                .GroupBy(chunk => new { chunk.DocumentId, chunk.Document!.Nama, chunk.Document!.NamaFile })
                 .Select(g => new { 
                     DocumentId = g.Key.DocumentId,
                     DocumentTitle = g.Key.Nama,
                     NamaFile = g.Key.NamaFile,
-                    NamaTenagaAhli = g.First().Document.NamaTenagaAhli,
-                    PeriodeLaporan = g.First().Document.PeriodeLaporan,
-                    BidangId = g.First().Document.BidangId,
-                    Bidang = g.First().Document.Bidang?.Nama,
+                    NamaTenagaAhli = g.First().Document?.NamaTenagaAhli,
+                    PeriodeLaporan = g.First().Document?.PeriodeLaporan,
+                    BidangId = g.First().Document?.BidangId,
+                    Bidang = g.First().Document?.Bidang?.Nama,
                     Images = relevantImages
                         .Where(img => img.DocumentId == g.Key.DocumentId)
                         .Select(img => new {

@@ -287,7 +287,7 @@ public class UserController : ControllerBase
                 }
 
                 if ((existingUser.IsApproved && existingUser.BidangId != bidangId.Value) || 
-                    existingUser.Role == "admin" || existingUser.Role == "admin" || existingUser.Role == "kasubag")
+                    existingUser.Role == "admin" || existingUser.Role == "kasubag")
                 {
                     return Forbid("Admin/Kasubag hanya bisa menghapus Tenaga Ahli di bidangnya sendiri.");
                 }

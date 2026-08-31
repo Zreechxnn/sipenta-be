@@ -2,7 +2,7 @@ using System.Text;
 using UglyToad.PdfPig;
 using SIAP.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implemenations;
+namespace SIAP.Api.Services.Implementations;
 
 public class DocumentDetectionService : IDocumentDetectionService
 {

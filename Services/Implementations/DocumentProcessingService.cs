@@ -10,7 +10,7 @@ using SIAP.Api.Services.Parsers;
 using SIAP.Api.Services.Chunking.Interfaces;
 using SIAP.Api.Hubs;
 
-namespace SIAP.Api.Services.Implemenations;
+namespace SIAP.Api.Services.Implementations;
 
 public class DocumentProcessingService : BackgroundService
 {

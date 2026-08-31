@@ -8,9 +8,8 @@ using SIAP.Api.Configurations;
 using SIAP.Api.Data;
 using SIAP.Api.Middleware;
 using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Repositories.Implemenations;
+using SIAP.Api.Repositories.Implementations;
 using SIAP.Api.Services.Interfaces;
-using SIAP.Api.Services.Implemenations;
 using SIAP.Api.Services.Implementations;
 using SIAP.Api.Hubs;
 using Microsoft.AspNetCore.RateLimiting;
@@ -103,6 +102,10 @@ builder.Services.AddAuthentication(options =>
             {
                 context.Token = accessToken;
             }
+            else if (context.Request.Cookies.TryGetValue("sipenta_token", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
+            {
+                context.Token = cookieToken;
+            }
             return Task.CompletedTask;
         }
     };
@@ -190,7 +193,11 @@ builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy,
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategyFactory, SIAP.Api.Services.Chunking.Implementations.ChunkStrategyFactory>();
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkService, SIAP.Api.Services.Chunking.Implementations.ChunkService>();
 
+// Memory Cache
+builder.Services.AddMemoryCache();
+
 // Services
+builder.Services.AddScoped<ILoginRateLimiter, LoginRateLimiter>();
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();

@@ -10,7 +10,7 @@ using SIAP.Api.Services.Chunking.Interfaces;
 using SIAP.Api.Services.Parsers;
 using Microsoft.Extensions.Logging;
 
-namespace SIAP.Api.Services.Implemenations;
+namespace SIAP.Api.Services.Implementations;
 
 public class DocumentService : IDocumentService
 {
