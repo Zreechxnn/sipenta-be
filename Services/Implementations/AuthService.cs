@@ -178,12 +178,17 @@ public class AuthService : IAuthService
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+        var roleName = user.Role?.Name ?? "user";
         var claims = new List<Claim>
         {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new Claim(ClaimTypes.Name, user.Username),
             new Claim(JwtRegisteredClaimNames.UniqueName, user.Username),
+            new Claim(ClaimTypes.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.Role?.Name ?? "user"),
+            new Claim(ClaimTypes.Role, roleName),
+            new Claim("role", roleName),
             new Claim("isApproved", user.IsApproved.ToString().ToLower()),
             new Claim("bidangId", user.BidangId?.ToString() ?? ""),
             new Claim("bidang", user.Bidang?.Nama ?? "")
