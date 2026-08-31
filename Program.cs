@@ -89,7 +89,9 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtOptions!.Issuer,
         ValidAudience = jwtOptions.Audience,
-        IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtOptions.Key))
+        IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtOptions.Key)),
+        NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier,
+        RoleClaimType = System.Security.Claims.ClaimTypes.Role
     };
 
     options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
@@ -102,9 +104,12 @@ builder.Services.AddAuthentication(options =>
             {
                 context.Token = accessToken;
             }
-            else if (context.Request.Cookies.TryGetValue("sipenta_token", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
+            else if (string.IsNullOrEmpty(context.Token) && !context.Request.Headers.ContainsKey("Authorization"))
             {
-                context.Token = cookieToken;
+                if (context.Request.Cookies.TryGetValue("sipenta_token", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
+                {
+                    context.Token = cookieToken;
+                }
             }
             return Task.CompletedTask;
         }
@@ -154,14 +159,30 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        var allowedOrigins = new List<string>
+        var allowedOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "https://siap-fe.rechanpage.my.id",
             "https://sipenta-fe.vercel.app",
-            "http://localhost:3000"
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001"
         };
 
-        policy.WithOrigins(allowedOrigins.ToArray()) // Masukkan array origin ke policy
+        policy.SetIsOriginAllowed(origin =>
+              {
+                  if (string.IsNullOrEmpty(origin)) return false;
+                  if (allowedOrigins.Contains(origin)) return true;
+                  try
+                  {
+                      var uri = new Uri(origin);
+                      return uri.Host == "localhost" || uri.Host == "127.0.0.1" || origin.EndsWith(".vercel.app") || origin.EndsWith(".rechanpage.my.id");
+                  }
+                  catch
+                  {
+                      return false;
+                  }
+              })
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
