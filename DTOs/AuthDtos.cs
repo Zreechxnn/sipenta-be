@@ -25,3 +25,12 @@ public class GoogleLoginRequest
 {
     public string IdToken { get; set; } = string.Empty;
 }
+
+public class LoginErrorResponse
+{
+    public string Message { get; set; } = string.Empty;
+    public bool IsLockedOut { get; set; }
+    public int RetryAfterSeconds { get; set; }
+    public int RemainingAttempts { get; set; }
+}
+
