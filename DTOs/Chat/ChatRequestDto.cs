@@ -13,6 +13,8 @@ public class ChatRequestDto
     public Guid? SessionId { get; set; }
 
     public int TopK { get; set; } = 5;
+
+    public string? ModelMode { get; set; } = "auto";
 }
 
 public class ChatMessageDto

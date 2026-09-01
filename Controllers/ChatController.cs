@@ -10,6 +10,9 @@ using SIAP.Api.Entities;
 using SIAP.Api.Hubs;
 using SIAP.Api.Repositories.Interfaces;
 using SIAP.Api.Services.Interfaces;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Jpeg;
 
 namespace SIAP.Api.Controllers;
 
@@ -22,7 +25,9 @@ public class ChatController : ControllerBase
     private readonly IDocumentRepository _repository;
     private readonly AppDbContext _dbContext;
     private readonly IEmbeddingService _embeddingService;
+    private readonly IGoogleDriveService _driveService;
     private readonly IHubContext<AppHub> _hubContext;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ChatController> _logger;
 
     public ChatController(
@@ -30,15 +35,60 @@ public class ChatController : ControllerBase
         IDocumentRepository repository,
         AppDbContext dbContext,
         IEmbeddingService embeddingService,
+        IGoogleDriveService driveService,
         IHubContext<AppHub> hubContext,
+        IConfiguration configuration,
         ILogger<ChatController> logger)
     {
         _groqService = groqService;
         _repository = repository;
         _dbContext = dbContext;
         _embeddingService = embeddingService;
+        _driveService = driveService;
         _hubContext = hubContext;
+        _configuration = configuration;
         _logger = logger;
+    }
+
+    [HttpGet("Models")]
+    public IActionResult GetModels()
+    {
+        var textModel = _configuration["Llm:Model"] ?? _configuration["Llm:Model2"] ?? "openai/gpt-oss-120b";
+        var visionModel = _configuration["Llm:Image"] ?? _configuration["Llm:image2"] ?? "qwen/qwen3.6-27b";
+
+        var models = new[]
+        {
+            new {
+                Id = "auto",
+                Name = "Auto (Hybrid Teks & Vision)",
+                Tag = "Rekomendasi",
+                Icon = "fa-wand-magic-sparkles",
+                Description = "Deteksi gambar otomatis jika ada, dengan respon analisis dokumen komprehensif",
+                ModelName = $"{textModel} / {visionModel}"
+            },
+            new {
+                Id = "text",
+                Name = "Model Teks (Penalaran)",
+                Tag = "Cepat & Luas",
+                Icon = "fa-file-lines",
+                Description = "Analisis teks laporan kerja, tabel kegiatan, dan perbandingan bulanan",
+                ModelName = textModel
+            },
+            new {
+                Id = "vision",
+                Name = "Model Vision (Penglihatan)",
+                Tag = "Visual & Kode",
+                Icon = "fa-eye",
+                Description = "Fokus membaca gambar dokumen, screenshot IDE/kode, dan teks antarmuka",
+                ModelName = visionModel
+            }
+        };
+
+        return Ok(ApiResponse<object>.Ok(new {
+            CurrentTextModel = textModel,
+            CurrentVisionModel = visionModel,
+            Options = models
+        }, "Berhasil"));
     }
 
     [HttpGet("Sessions")]
@@ -261,12 +311,163 @@ PANDUAN:
             .Select(x => x.Image)
             .ToList();
 
-            var relevantImages = scoredImages.Take(4).ToList();
+            var relevantImages = scoredImages.Take(2).ToList();
+
+            // Extract any images already referenced/shown in previous messages, prioritizing the MOST RECENT message first
+            var historyImageFileIds = new List<string>();
+            if (session.Messages != null && session.Messages.Any())
+            {
+                foreach (var msg in session.Messages.OrderByDescending(m => m.CreatedAt).Take(6))
+                {
+                    if (!string.IsNullOrEmpty(msg.Content))
+                    {
+                        var matches = System.Text.RegularExpressions.Regex.Matches(msg.Content, @"/api/Documents/images/([a-zA-Z0-9_\-]+)");
+                        foreach (System.Text.RegularExpressions.Match m in matches)
+                        {
+                            var fid = m.Groups[1].Value;
+                            if (!historyImageFileIds.Contains(fid))
+                            {
+                                historyImageFileIds.Add(fid);
+                            }
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(msg.Sources))
+                    {
+                        var matches = System.Text.RegularExpressions.Regex.Matches(msg.Sources, @"/api/Documents/images/([a-zA-Z0-9_\-]+)");
+                        foreach (System.Text.RegularExpressions.Match m in matches)
+                        {
+                            var fid = m.Groups[1].Value;
+                            if (!historyImageFileIds.Contains(fid))
+                            {
+                                historyImageFileIds.Add(fid);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If user asks a follow-up about an image or if search found 0 images but history has them
+            var isImageFollowUp = System.Text.RegularExpressions.Regex.IsMatch(queryLower, @"\b(gambar|foto|citra|orang|berapa|wanita|pria|laki|cewek|cowok|tampak|terlihat|lihat|zoom|tampilan|screenshot|ss|itu|tersebut|bahasa|framework|kode|code|file)\b");
+
+            if (historyImageFileIds.Any() && (isImageFollowUp || !relevantImages.Any()))
+            {
+                var distinctHistoryIds = historyImageFileIds.Take(2).ToList();
+                var historyDocImages = await _dbContext.DocumentImages
+                    .Where(di => di.FilePath != null)
+                    .ToListAsync();
+                
+                var matchedHistoryImages = new List<DocumentImage>();
+                foreach (var hid in distinctHistoryIds)
+                {
+                    var found = historyDocImages.FirstOrDefault(di => di.FilePath != null && di.FilePath.Contains(hid));
+                    if (found != null && !matchedHistoryImages.Any(m => m.Id == found.Id))
+                    {
+                        matchedHistoryImages.Add(found);
+                    }
+                }
+                
+                // If user is following up on a previously shown image, prioritize the most recent or date-matched image
+                if (isImageFollowUp && matchedHistoryImages.Any())
+                {
+                    var bestHistory = matchedHistoryImages.FirstOrDefault(img => 
+                        (!string.IsNullOrEmpty(dateRegexPattern) && (
+                            System.Text.RegularExpressions.Regex.IsMatch(img.Caption ?? "", dateRegexPattern) ||
+                            System.Text.RegularExpressions.Regex.IsMatch(img.ContextText ?? "", dateRegexPattern)
+                        ))
+                    ) ?? matchedHistoryImages[0];
+
+                    var reordered = new List<DocumentImage> { bestHistory };
+                    foreach (var hImg in matchedHistoryImages)
+                    {
+                        if (!reordered.Any(r => r.Id == hImg.Id))
+                            reordered.Add(hImg);
+                    }
+                    foreach (var rImg in relevantImages)
+                    {
+                        if (!reordered.Any(r => r.Id == rImg.Id))
+                            reordered.Add(rImg);
+                    }
+                    relevantImages = reordered;
+                }
+                else
+                {
+                    foreach (var hImg in matchedHistoryImages.AsEnumerable().Reverse())
+                    {
+                        if (!relevantImages.Any(r => r.Id == hImg.Id))
+                        {
+                            relevantImages.Insert(0, hImg);
+                        }
+                    }
+                }
+            }
+
+            relevantImages = relevantImages.Take(2).ToList();
+
+            // Check if vision is enabled based on user-selected ModelMode ("auto", "vision", "text")
+            var isVisionModeAllowed = !string.Equals(request.ModelMode, "text", StringComparison.OrdinalIgnoreCase);
+
+            // Fetch image bytes for Vision AI in parallel
+            var visionImages = new List<LlmImageInput>();
+            if (isVisionModeAllowed && relevantImages.Any())
+            {
+                var fetchTasks = relevantImages.Select(async img =>
+                {
+                    try
+                    {
+                        byte[]? bytes = null;
+                        var displayPath = img.FilePath ?? string.Empty;
+
+                        if (displayPath.StartsWith("https://drive.google.com/uc?id="))
+                        {
+                            var fileId = displayPath.Replace("https://drive.google.com/uc?id=", "");
+                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                            using var stream = await _driveService.DownloadFileAsync(fileId);
+                            using var ms = new MemoryStream();
+                            await stream.CopyToAsync(ms, cts.Token);
+                            bytes = ms.ToArray();
+                        }
+                        else if (displayPath.StartsWith("/api/Documents/images/"))
+                        {
+                            var fileId = displayPath.Replace("/api/Documents/images/", "");
+                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                            using var stream = await _driveService.DownloadFileAsync(fileId);
+                            using var ms = new MemoryStream();
+                            await stream.CopyToAsync(ms, cts.Token);
+                            bytes = ms.ToArray();
+                        }
+                        else if (!string.IsNullOrWhiteSpace(displayPath))
+                        {
+                            var localPath = Path.Combine(Directory.GetCurrentDirectory(), displayPath.TrimStart('/', '\\'));
+                            if (System.IO.File.Exists(localPath))
+                            {
+                                bytes = await System.IO.File.ReadAllBytesAsync(localPath);
+                            }
+                        }
+
+                        if (bytes != null && bytes.Length > 0 && bytes.Length <= 8 * 1024 * 1024)
+                        {
+                            var optimizedBytes = OptimizeImageForVision(bytes, 900);
+                            return new LlmImageInput(optimizedBytes, "image/jpeg", img.Caption, img.FilePath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to fetch image bytes for Vision AI for image ID {ImageId}", img.Id);
+                    }
+                    return null;
+                });
+
+                var fetched = await Task.WhenAll(fetchTasks);
+                visionImages = fetched.Where(v => v != null).Cast<LlmImageInput>().ToList();
+            }
+
+            // Limit chunks to top 5 to ensure fast inference and stay well within TPM limits
+            var topChunks = results.Take(5).ToList();
 
             // 2. Construct context from documents
             var contextBuilder = new System.Text.StringBuilder();
             contextBuilder.AppendLine("Berikut adalah potongan dokumen relevan dari database:");
-            foreach (var chunk in results)
+            foreach (var chunk in topChunks)
             {
                 var docTitle = chunk.Document?.Nama ?? "Dokumen Tanpa Judul";
                 var tenagaAhli = chunk.Document?.NamaTenagaAhli ?? "Tidak Diketahui";
@@ -280,8 +481,9 @@ PANDUAN:
             if (relevantImages.Any())
             {
                 contextBuilder.AppendLine("\nGAMBAR DOKUMENTASI DARI DOKUMEN:");
-                foreach (var img in relevantImages)
+                for (int i = 0; i < relevantImages.Count; i++)
                 {
+                    var img = relevantImages[i];
                     var captionText = !string.IsNullOrWhiteSpace(img.Caption) ? $" (Keterangan: {img.Caption})" : "";
                     
                     var displayPath = img.FilePath;
@@ -291,7 +493,7 @@ PANDUAN:
                         displayPath = $"/api/Documents/images/{fileId}";
                     }
                     
-                    contextBuilder.AppendLine($"- [Halaman {img.PageNumber}]: {displayPath}{captionText}");
+                    contextBuilder.AppendLine($"- [Gambar #{i + 1} - Halaman {img.PageNumber}]: {displayPath}{captionText}");
                 }
             }
 
@@ -303,41 +505,59 @@ PANDUAN MENJAWAB:
    - Teliti seluruh nama tenaga ahli, tanggal, dan uraian kegiatan yang tercantum pada KONTEKS DOKUMEN di bawah. Perhatikan header [Dokumen: ... | Tenaga Ahli: ...] untuk mengetahui dokumen tersebut milik siapa.
    - Jika pengguna menanyakan kegiatan seseorang (misalnya 'Angel' atau 'Firman'), pastikan Anda membaca header Tenaga Ahli untuk mencocokkannya, walaupun nama tersebut mungkin tidak disebut lagi di dalam teks laporannya.
    - Jika pengguna menanyakan kegiatan pada tanggal atau periode tertentu (misalnya tanggal 5 Mei), telusuri dengan teliti apakah ada kegiatan atau tugas rutin pada tanggal/hari tersebut di dalam dokumen.
-2. **Ringkas, Padat, & Tuntas**:
-    - Berikan jawaban yang to the point dan tidak bertele-tele.
-    - Ambil inti poin penting dari laporan tenaga ahli.
-    - Pastikan setiap kalimat dan bagian jawaban diselesaikan secara utuh sampai tuntas.
-3. **Bahasa Profesional & Jelas**:
-    - Gunakan gaya bahasa Indonesia yang santun, profesional, dan lugas.
-4. **Format Markdown Rapi**:
-    - Gunakan bullet points (-) atau penomoran untuk merinci progres/poin penting.
-    - Tebalkan (**kata kunci / nama / tanggal / status**) agar mudah dibaca cepat.
-5. **Gambar / Foto Dokumentasi Kegiatan**:
-    - Jika pada bagian GAMBAR DOKUMENTASI terdapat gambar yang relevan dengan kegiatan yang Anda jelaskan, sertakan gambar tersebut dalam format Markdown `![Foto Dokumentasi](<path_yang_diberikan>)` (isikan path URL-nya secara langsung di dalam kurung dari bagian GAMBAR DOKUMENTASI).
-6. **Kepatuhan Dokumen (Anti-Halusinasi)**:
-    - Jawaban harus berlandaskan pada KONTEKS DOKUMEN di bawah.
-    - JANGAN mengarang laporan, progres, atau pencapaian di luar dokumen.
+2. **Penglihatan Gambar & Deteksi Visual Objektif (Vision AI)**:
+   - Anda menerima input visual (gambar/foto asli dokumen) serta daftar pada bagian GAMBAR DOKUMENTASI.
+   - **Pemeriksaan Visual Murni & Anti-Bias**: Jika pengguna menanyakan apa yang terlihat di dalam gambar/foto (seperti bahasa pemrograman, framework, nama file, error log, perintah terminal, jumlah orang, tampilan antarmuka, objek):
+     * Analisis visual langsung gambar tersebut secara objektif, teliti, dan berbasis fakta yang terlihat di layar/foto.
+     * Baca teks dan elemen visual nyata pada gambar: periksa ekstensi file (misal: `.php`, `.js`, `.ts`, `.py`, `.cs`, `.json`), ikon bahasa/file, nama folder (misal: `vendor`, `laravel`, `app/Filament`, `node_modules`), perintah CLI di terminal (misal: `php artisan`, `npm`, `dotnet`), serta tab editor.
+     * **Prioritas Bukti Visual Nyata**: Jangan terpengaruh atau berasumsi berdasarkan teks dari tanggal lain atau riwayat chat sebelumnya jika gambar menampilkan hal yang berbeda (contoh: jika dokumen teks di tanggal lain menyebut Next.js, namun screenshot gambar pada kegiatan ini menampilkan file `.php`, folder Laravel, dan perintah `php artisan`, jelaskan secara tepat dan jujur bahwa gambar tersebut menggunakan PHP / Laravel).
+   - Jika gambar tersebut relevan dengan penjelasan atau kegiatan yang ditanyakan, sertakan gambar tersebut secara tepat dalam format Markdown:
+     `![Deskripsi/Keterangan Foto](<path_dari_daftar_gambar>)`
+     (Contoh: `![Foto Dokumentasi Kegiatan](/api/Documents/images/1u-...)` gunakan path URL yang ada di daftar).
+   - Jika pengguna bertanya tentang gambar/foto yang baru saja dikirim pada percakapan sebelumnya, gunakan gambar yang disertakan untuk menjawab pertanyaannya secara visual.
+   - Jika foto TIDAK relevan dengan apa yang ditanyakan, JANGAN sertakan foto tersebut.
+3. **Ringkas, Padat, & Tuntas**:
+   - Berikan jawaban yang to the point dan tidak bertele-tele.
+   - Ambil inti poin penting dari laporan tenaga ahli.
+   - Pastikan setiap kalimat dan bagian jawaban diselesaikan secara utuh sampai tuntas.
+4. **Bahasa Profesional & Format Markdown Rapi**:
+   - Gunakan gaya bahasa Indonesia yang santun, profesional, dan lugas.
+   - Gunakan bullet points (-) atau penomoran untuk merinci progres/poin penting.
+   - Tebalkan (**kata kunci / nama / tanggal / status**) agar mudah dibaca cepat.
+5. **Kepatuhan Dokumen & Fakta Visual (Anti-Halusinasi)**:
+   - Jawaban harus berlandaskan pada KONTEKS DOKUMEN dan bukti visual nyata pada gambar yang diberikan.
+   - JANGAN mengarang laporan, progres, atau detail visual di luar apa yang tercantum pada dokumen dan gambar.
 
 KONTEKS DOKUMEN:
 {contextBuilder}";
 
-            // 5. Construct conversation history for LLM
-            var llmMessages = new List<object>();
+            // 5. Construct compact conversation history for LLM (take last 4 messages to prevent token bloat)
+            var llmHistory = new List<object>();
             
-            // Add previous history from database
             if (session.Messages != null && session.Messages.Any())
             {
-                foreach (var msg in session.Messages.OrderBy(m => m.CreatedAt))
+                var recentMessages = session.Messages.OrderBy(m => m.CreatedAt).TakeLast(4).ToList();
+                foreach (var msg in recentMessages)
                 {
-                    llmMessages.Add(new { role = msg.Role, content = msg.Content });
+                    var cleanContent = msg.Content ?? "";
+                    if (cleanContent.Length > 800)
+                    {
+                        cleanContent = cleanContent.Substring(0, 800) + "...";
+                    }
+                    llmHistory.Add(new { role = msg.Role, content = (object)cleanContent });
                 }
             }
             else if (request.History != null && request.History.Any())
             {
-                // Fallback to request history if db is empty (for backward compatibility if needed)
-                foreach (var msg in request.History)
+                var recentHistory = request.History.TakeLast(4).ToList();
+                foreach (var msg in recentHistory)
                 {
-                    llmMessages.Add(new { role = msg.Role, content = msg.Content });
+                    var cleanContent = msg.Content ?? "";
+                    if (cleanContent.Length > 800)
+                    {
+                        cleanContent = cleanContent.Substring(0, 800) + "...";
+                    }
+                    llmHistory.Add(new { role = msg.Role, content = (object)cleanContent });
                 }
             }
             
@@ -349,11 +569,12 @@ KONTEKS DOKUMEN:
                 Content = request.Message
             };
             _dbContext.ChatMessages.Add(userMsg);
-            
-            llmMessages.Add(new { role = "user", content = request.Message });
 
-            // 6. Call LLM
-            var answer = await _groqService.GetChatCompletionWithHistoryAsync(systemPrompt, llmMessages);
+            // Pass top 1 vision image to stay safely below Groq 8000 TPM limit
+            var finalVisionImages = visionImages.Take(1).ToList();
+
+            // 6. Call LLM with Vision support
+            var answer = await _groqService.GetChatCompletionWithVisionAsync(systemPrompt, llmHistory, request.Message, finalVisionImages);
 
             // 7. Add AI response to db
             var uniqueSources = results
@@ -406,6 +627,31 @@ KONTEKS DOKUMEN:
         catch (Exception ex)
         {
             return BadRequest(ApiResponse<object>.Gagal(ex.Message));
+        }
+    }
+
+    private static byte[] OptimizeImageForVision(byte[] inputBytes, int maxDimension = 900)
+    {
+        try
+        {
+            using var image = Image.Load(inputBytes);
+            if (image.Width > maxDimension || image.Height > maxDimension)
+            {
+                var options = new ResizeOptions
+                {
+                    Size = new Size(maxDimension, maxDimension),
+                    Mode = ResizeMode.Max
+                };
+                image.Mutate(x => x.Resize(options));
+            }
+
+            using var ms = new MemoryStream();
+            image.SaveAsJpeg(ms, new JpegEncoder { Quality = 82 });
+            return ms.ToArray();
+        }
+        catch
+        {
+            return inputBytes;
         }
     }
 }
