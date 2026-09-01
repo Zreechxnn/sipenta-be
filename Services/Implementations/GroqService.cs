@@ -9,7 +9,7 @@ namespace SIAP.Api.Services.Implementations;
 
 public class GroqService : IGroqService
 {
-    private record LlmEndpointConfig(string ApiKey, string BaseUrl, string Model, string Name);
+    private record LlmEndpointConfig(string ApiKey, string BaseUrl, string Model, string ImageModel, string Name);
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<GroqService>? _logger;
@@ -26,27 +26,30 @@ public class GroqService : IGroqService
     private void LoadConfigurations(IConfiguration configuration)
     {
         var defaultBaseUrl = "https://api.groq.com/openai/v1/chat/completions";
-        var defaultModel = "qwen/qwen3.6-27b";
+        var defaultModel = "openai/gpt-oss-120b";
+        var defaultImageModel = "llama-3.2-11b-vision-preview";
 
-        // 1. Primary config (Llm:ApiKey, Llm:BaseUrl, Llm:Model)
+        // 1. Primary config (Llm:ApiKey, Llm:BaseUrl, Llm:Model, Llm:Image)
         var primaryKey = configuration["Llm:ApiKey"] ?? string.Empty;
         var primaryUrl = configuration["Llm:BaseUrl"] ?? defaultBaseUrl;
         var primaryModel = configuration["Llm:Model"] ?? defaultModel;
+        var primaryImage = configuration["Llm:Image"] ?? configuration["Llm:image"] ?? defaultImageModel;
 
         if (!string.IsNullOrWhiteSpace(primaryKey))
         {
-            _configs.Add(new LlmEndpointConfig(primaryKey.Trim(), primaryUrl.Trim(), primaryModel.Trim(), "Primary (Llm)"));
+            _configs.Add(new LlmEndpointConfig(primaryKey.Trim(), primaryUrl.Trim(), primaryModel.Trim(), primaryImage.Trim(), "Primary (Llm)"));
         }
 
         // 2. Secondary & subsequent configs (Llm:ApiKey2, Llm:ApiKey3, etc.)
         for (int i = 2; i <= 10; i++)
         {
-            var key = configuration[$"Llm:ApiKey{i}"];
+            var key = configuration[$"Llm:ApiKey{i}"] ?? configuration[$"Llm:apikey{i}"];
             if (!string.IsNullOrWhiteSpace(key))
             {
-                var url = configuration[$"Llm:BaseUrl{i}"] ?? primaryUrl;
-                var model = configuration[$"Llm:Model{i}"] ?? primaryModel;
-                _configs.Add(new LlmEndpointConfig(key.Trim(), url.Trim(), model.Trim(), $"Fallback {i} (Llm{i})"));
+                var url = configuration[$"Llm:BaseUrl{i}"] ?? configuration[$"Llm:baseurl{i}"] ?? primaryUrl;
+                var model = configuration[$"Llm:Model{i}"] ?? configuration[$"Llm:model{i}"] ?? primaryModel;
+                var image = configuration[$"Llm:Image{i}"] ?? configuration[$"Llm:image{i}"] ?? primaryImage;
+                _configs.Add(new LlmEndpointConfig(key.Trim(), url.Trim(), model.Trim(), image.Trim(), $"Fallback {i} (Llm{i})"));
             }
         }
     }
@@ -55,25 +58,93 @@ public class GroqService : IGroqService
     {
         var messages = new[]
         {
-            new { role = "system", content = systemPrompt },
-            new { role = "user", content = userPrompt }
+            new { role = "system", content = (object)systemPrompt },
+            new { role = "user", content = (object)userPrompt }
         };
 
-        return await SendWithFallbackAsync(messages, cancellationToken);
+        return await SendWithFallbackAsync(messages, isVision: false, cancellationToken);
     }
 
     public async Task<string> GetChatCompletionWithHistoryAsync(string systemPrompt, IEnumerable<object> messages, CancellationToken cancellationToken = default)
     {
         var allMessages = new List<object>
         {
-            new { role = "system", content = systemPrompt }
+            new { role = "system", content = (object)systemPrompt }
         };
         allMessages.AddRange(messages);
 
-        return await SendWithFallbackAsync(allMessages, cancellationToken);
+        return await SendWithFallbackAsync(allMessages, isVision: false, cancellationToken);
     }
 
-    private async Task<string> SendWithFallbackAsync(IEnumerable<object> messages, CancellationToken cancellationToken)
+    public async Task<string> GetChatCompletionWithVisionAsync(
+        string systemPrompt, 
+        IEnumerable<object> historyMessages, 
+        string userMessage, 
+        IEnumerable<LlmImageInput>? images, 
+        CancellationToken cancellationToken = default)
+    {
+        var imageList = images?.Where(img => img.Bytes != null && img.Bytes.Length > 0).ToList();
+        if (imageList != null && imageList.Any())
+        {
+            // Build Vision Content parts for user message
+            var contentParts = new List<object>
+            {
+                new { type = "text", text = userMessage }
+            };
+
+            foreach (var img in imageList)
+            {
+                var base64 = Convert.ToBase64String(img.Bytes);
+                var mime = string.IsNullOrWhiteSpace(img.MimeType) ? "image/jpeg" : img.MimeType;
+                contentParts.Add(new
+                {
+                    type = "image_url",
+                    image_url = new
+                    {
+                        url = $"data:{mime};base64,{base64}"
+                    }
+                });
+            }
+
+            var visionMessages = new List<object>
+            {
+                new { role = "system", content = (object)systemPrompt }
+            };
+            if (historyMessages != null)
+            {
+                visionMessages.AddRange(historyMessages);
+            }
+            visionMessages.Add(new { role = "user", content = (object)contentParts });
+
+            var visionResult = await SendWithFallbackAsync(visionMessages, isVision: true, cancellationToken);
+
+            // If vision completion succeeded without errors, return it
+            if (!string.IsNullOrWhiteSpace(visionResult) && 
+                !visionResult.StartsWith("Terjadi kesalahan") && 
+                !visionResult.StartsWith("Llm API Key is not") &&
+                !visionResult.StartsWith("Mohon maaf, seluruh kuota"))
+            {
+                return visionResult;
+            }
+
+            _logger?.LogWarning("Vision LLM completion failed across endpoints ({VisionResult}). Falling back to text-only model...", visionResult);
+        }
+
+        // Fallback or text-only completion
+        var textMessages = new List<object>
+        {
+            new { role = "system", content = (object)systemPrompt }
+        };
+        if (historyMessages != null)
+        {
+            textMessages.AddRange(historyMessages);
+        }
+        textMessages.Add(new { role = "user", content = (object)userMessage });
+
+        return await SendWithFallbackAsync(textMessages, isVision: false, cancellationToken);
+    }
+
+    private async Task<string> SendWithFallbackAsync(IEnumerable<object> messages, bool isVision, CancellationToken cancellationToken)
     {
         if (_configs.Count == 0)
         {
@@ -85,11 +156,12 @@ public class GroqService : IGroqService
         for (int i = 0; i < _configs.Count; i++)
         {
             var config = _configs[i];
+            var selectedModel = isVision ? config.ImageModel : config.Model;
             try
             {
                 var requestBody = new
                 {
-                    model = config.Model,
+                    model = selectedModel,
                     messages = messages,
                     temperature = 0.1,
                     max_tokens = 3000
@@ -108,7 +180,7 @@ public class GroqService : IGroqService
                     var errorMsg = $"[{config.Name}] Status {statusCode}: {errorDetail}";
                     
                     _logger?.LogWarning("LLM Request to {Name} ({Url} - {Model}) failed with status {StatusCode}. Details: {ErrorDetail}. Attempting next config...", 
-                        config.Name, config.BaseUrl, config.Model, statusCode, errorDetail);
+                        config.Name, config.BaseUrl, selectedModel, statusCode, errorDetail);
                     
                     errors.Add(errorMsg);
                     continue; // Coba endpoint / API key berikutnya
@@ -122,12 +194,18 @@ public class GroqService : IGroqService
                     .GetProperty("content")
                     .GetString();
 
+                if (!string.IsNullOrEmpty(answer))
+                {
+                    // Clean up <think>...</think> tags if model produces reasoning output
+                    answer = System.Text.RegularExpressions.Regex.Replace(answer, @"<think>[\s\S]*?</think>", "").Trim();
+                }
+
                 return answer ?? string.Empty;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 var errorMsg = $"[{config.Name}] Exception: {ex.Message}";
-                _logger?.LogError(ex, "Error while calling LLM on {Name} ({Url}). Attempting fallback...", config.Name, config.BaseUrl);
+                _logger?.LogError(ex, "Error while calling LLM on {Name} ({Url} - {Model}). Attempting fallback...", config.Name, config.BaseUrl, selectedModel);
                 errors.Add(errorMsg);
             }
         }
