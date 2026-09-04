@@ -101,16 +101,22 @@ builder.Services.AddAuthentication(options =>
     {
         OnMessageReceived = context =>
         {
-            var accessToken = context.Request.Query["access_token"];
+            var accessToken = context.Request.Query["access_token"].ToString();
             var path = context.HttpContext.Request.Path;
             var dataProtectionProvider = context.HttpContext.RequestServices.GetService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
             var protector = dataProtectionProvider?.CreateProtector("SIAP.Auth.CookieProtection");
 
-            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            // 1. Check if real JWT query parameter was provided (WebSockets)
+            if (!string.IsNullOrEmpty(accessToken) && 
+                accessToken != "hidden-httponly-token" && 
+                accessToken != "session-active" && 
+                path.StartsWithSegments("/hubs"))
             {
                 context.Token = accessToken;
             }
-            else if (string.IsNullOrEmpty(context.Token) && !context.Request.Headers.ContainsKey("Authorization"))
+
+            // 2. If no token found from header or query, extract and decrypt from HttpOnly session cookie
+            if (string.IsNullOrEmpty(context.Token))
             {
                 if (context.Request.Cookies.TryGetValue("sipenta_token", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
                 {
@@ -124,20 +130,7 @@ builder.Services.AddAuthentication(options =>
                     }
                 }
             }
-            else if (path.StartsWithSegments("/hubs") && string.IsNullOrEmpty(context.Token))
-            {
-                if (context.Request.Cookies.TryGetValue("sipenta_token", out var hubCookieToken) && !string.IsNullOrEmpty(hubCookieToken))
-                {
-                    try
-                    {
-                        context.Token = protector != null ? protector.Unprotect(hubCookieToken) : hubCookieToken;
-                    }
-                    catch
-                    {
-                        context.Token = hubCookieToken;
-                    }
-                }
-            }
+
             return Task.CompletedTask;
         }
     };
@@ -297,6 +290,12 @@ app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
     RequestPath = "/uploads/images"
+});
+
+// Support reverse proxy headers (Nginx/Cloudflare/Docker/Vercel)
+app.UseForwardedHeaders(new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
+{
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
 });
 
 // Middleware global
