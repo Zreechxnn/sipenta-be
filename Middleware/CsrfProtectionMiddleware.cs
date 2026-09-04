@@ -42,6 +42,20 @@ public class CsrfProtectionMiddleware
             return;
         }
 
+        // 0. Block automated CLI tools (curl, Postman, python-requests, wget)
+        var userAgent = context.Request.Headers.UserAgent.ToString();
+        if (userAgent.StartsWith("curl/", StringComparison.OrdinalIgnoreCase) ||
+            userAgent.StartsWith("PostmanRuntime/", StringComparison.OrdinalIgnoreCase) ||
+            userAgent.StartsWith("python-requests/", StringComparison.OrdinalIgnoreCase) ||
+            userAgent.StartsWith("Wget/", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Access blocked: Automated CLI tool User-Agent '{UserAgent}' on {Path}", userAgent, path);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync("{\"message\": \"Permintaan ditolak: Akses langsung via CLI/alat otomatis tidak diizinkan.\"}");
+            return;
+        }
+
         // 1. Validate Origin header if present
         if (context.Request.Headers.TryGetValue("Origin", out var originValues) && originValues.Count > 0)
         {

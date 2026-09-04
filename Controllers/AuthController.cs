@@ -67,7 +67,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = response.RefreshToken,
+                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie, never expose in JSON!
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -117,7 +117,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = response.RefreshToken,
+                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie
                 User = response.User,
                 IsNewUser = true,
                 ExpiresAt = expiry
@@ -150,7 +150,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = response.RefreshToken,
+                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie
                 User = response.User,
                 IsNewUser = response.IsNewUser,
                 ExpiresAt = expiry
@@ -190,7 +190,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = response.RefreshToken,
+                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
