@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using SIAP.Api.DTOs;
 using SIAP.Api.Hubs;
 using SIAP.Api.Services.Interfaces;
+using System.Security.Claims;
 
 namespace SIAP.Api.Controllers;
 
@@ -13,15 +15,18 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly ILoginRateLimiter _rateLimiter;
     private readonly IHubContext<AppHub> _hubContext;
+    private readonly IDataProtector _dataProtector;
 
     public AuthController(
         IAuthService authService, 
         ILoginRateLimiter rateLimiter,
-        IHubContext<AppHub> hubContext)
+        IHubContext<AppHub> hubContext,
+        IDataProtectionProvider dataProtectionProvider)
     {
         _authService = authService;
         _rateLimiter = rateLimiter;
         _hubContext = hubContext;
+        _dataProtector = dataProtectionProvider.CreateProtector("SIAP.Auth.CookieProtection");
     }
 
     [HttpPost("login")]
@@ -45,15 +50,22 @@ public class AuthController : ControllerBase
 
         try
         {
-            var response = await _authService.LoginAsync(request);
+            var response = await _authService.LoginAsync(request, ip);
 
             // Reset failed attempt counter on success
             await _rateLimiter.ResetAttemptsAsync(request.Username, ip);
 
-            // Set secure HttpOnly cookie for JWT
-            SetTokenCookie(response.Token);
+            // Set secure HttpOnly session cookies for encrypted JWT & encrypted Refresh Token (cleared when browser closes)
+            SetAuthCookies(response.Token, response.RefreshToken);
 
-            return Ok(response);
+            // Do not expose raw tokens in response body to prevent inspection leaks
+            return Ok(new AuthResponse
+            {
+                Token = "hidden-httponly-token",
+                RefreshToken = null,
+                User = response.User,
+                IsNewUser = false
+            });
         }
         catch (Exception)
         {
@@ -84,17 +96,24 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        var ip = GetClientIp();
         try
         {
-            var response = await _authService.RegisterAsync(request);
+            var response = await _authService.RegisterAsync(request, ip);
 
-            // Set secure HttpOnly cookie for JWT
-            SetTokenCookie(response.Token);
+            // Set secure HttpOnly session cookies for encrypted JWT & Refresh Token
+            SetAuthCookies(response.Token, response.RefreshToken);
 
             // Broadcast SignalR event to admins for real-time user registration
             await _hubContext.Clients.All.SendAsync("UserRegistered", new { username = request.Username, email = request.Email });
 
-            return Ok(response);
+            return Ok(new AuthResponse
+            {
+                Token = "hidden-httponly-token",
+                RefreshToken = null,
+                User = response.User,
+                IsNewUser = true
+            });
         }
         catch (Exception ex)
         {
@@ -105,12 +124,13 @@ public class AuthController : ControllerBase
     [HttpPost("google-login")]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
+        var ip = GetClientIp();
         try
         {
-            var response = await _authService.GoogleLoginAsync(request);
+            var response = await _authService.GoogleLoginAsync(request, ip);
             
-            // Set secure HttpOnly cookie for JWT
-            SetTokenCookie(response.Token);
+            // Set secure HttpOnly session cookies for encrypted JWT & Refresh Token
+            SetAuthCookies(response.Token, response.RefreshToken);
 
             if (response.IsNewUser)
             {
@@ -118,7 +138,13 @@ public class AuthController : ControllerBase
                 await _hubContext.Clients.All.SendAsync("UserRegistered", new { username = response.User.Username, email = response.User.Email });
             }
 
-            return Ok(response);
+            return Ok(new AuthResponse
+            {
+                Token = "hidden-httponly-token",
+                RefreshToken = null,
+                User = response.User,
+                IsNewUser = response.IsNewUser
+            });
         }
         catch (Exception ex)
         {
@@ -126,39 +152,150 @@ public class AuthController : ControllerBase
         }
     }
 
-    [HttpPost("logout")]
-    public IActionResult Logout()
+    [HttpPost("refresh-token")]
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest? request)
     {
-        var isHttps = Request.IsHttps || (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && proto.ToString().Equals("https", StringComparison.OrdinalIgnoreCase));
-
-        // Clear HttpOnly token cookie
-        Response.Cookies.Delete("sipenta_token", new CookieOptions
+        var refreshToken = request?.RefreshToken;
+        if (string.IsNullOrEmpty(refreshToken) && Request.Cookies.TryGetValue("sipenta_refresh_token", out var protectedRefreshToken) && !string.IsNullOrEmpty(protectedRefreshToken))
         {
-            HttpOnly = true,
-            Secure = isHttps,
-            SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
-            Path = "/"
-        });
+            try
+            {
+                refreshToken = _dataProtector.Unprotect(protectedRefreshToken);
+            }
+            catch
+            {
+                refreshToken = protectedRefreshToken;
+            }
+        }
 
-        return Ok(new { message = "Logout berhasil." });
+        if (string.IsNullOrEmpty(refreshToken))
+        {
+            return Unauthorized(new { message = "Refresh token tidak ditemukan atau telah kedaluwarsa." });
+        }
+
+        var ip = GetClientIp();
+
+        try
+        {
+            var response = await _authService.RefreshTokenAsync(refreshToken, ip);
+
+            // Set new encrypted session cookies for rotated tokens
+            SetAuthCookies(response.Token, response.RefreshToken);
+
+            return Ok(new AuthResponse
+            {
+                Token = "hidden-httponly-token",
+                RefreshToken = null,
+                User = response.User,
+                IsNewUser = false
+            });
+        }
+        catch (Exception ex)
+        {
+            ClearAuthCookies();
+            return Unauthorized(new { message = ex.Message });
+        }
     }
 
-    private void SetTokenCookie(string token)
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest? request)
+    {
+        var ip = GetClientIp();
+
+        var refreshToken = request?.RefreshToken;
+        if (string.IsNullOrEmpty(refreshToken) && Request.Cookies.TryGetValue("sipenta_refresh_token", out var protectedRefreshToken) && !string.IsNullOrEmpty(protectedRefreshToken))
+        {
+            try
+            {
+                refreshToken = _dataProtector.Unprotect(protectedRefreshToken);
+            }
+            catch
+            {
+                refreshToken = protectedRefreshToken;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            await _authService.RevokeTokenAsync(refreshToken, ip);
+        }
+        else if (User.Identity?.IsAuthenticated == true)
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
+            if (Guid.TryParse(userIdStr, out var userId))
+            {
+                await _authService.RevokeAllUserTokensAsync(userId, ip);
+            }
+        }
+
+        ClearAuthCookies();
+
+        return Ok(new { message = "Logout berhasil dan refresh token dinonaktifkan." });
+    }
+
+    private void SetAuthCookies(string token, string? refreshToken = null)
     {
         if (string.IsNullOrEmpty(token)) return;
 
         var isHttps = Request.IsHttps || (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && proto.ToString().Equals("https", StringComparison.OrdinalIgnoreCase));
 
+        // Encrypt the token using ASP.NET Core Data Protection (AES-256) so it cannot be read in DevTools Cookies
+        var protectedToken = _dataProtector.Protect(token);
+
+        // Omitting Expires and MaxAge creates a browser Session Cookie.
+        // The browser discards session cookies as soon as the browser / window is closed.
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
             Secure = isHttps,
             SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
-            Path = "/",
-            Expires = DateTimeOffset.UtcNow.AddDays(7)
+            Path = "/"
         };
 
-        Response.Cookies.Append("sipenta_token", token, cookieOptions);
+        Response.Cookies.Append("sipenta_token", protectedToken, cookieOptions);
+
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            var protectedRefreshToken = _dataProtector.Protect(refreshToken);
+            Response.Cookies.Append("sipenta_refresh_token", protectedRefreshToken, cookieOptions);
+        }
+
+        // Issue Double-Submit CSRF Cookie (readable by frontend script for X-CSRF-Token header)
+        var csrfToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        var csrfCookieOptions = new CookieOptions
+        {
+            HttpOnly = false, // Client JavaScript reads this to attach X-CSRF-Token header
+            Secure = isHttps,
+            SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Path = "/"
+        };
+        Response.Cookies.Append("sipenta_csrf", csrfToken, csrfCookieOptions);
+    }
+
+    private void ClearAuthCookies()
+    {
+        var isHttps = Request.IsHttps || (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && proto.ToString().Equals("https", StringComparison.OrdinalIgnoreCase));
+
+        var deleteOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = isHttps,
+            SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Path = "/"
+        };
+
+        Response.Cookies.Delete("sipenta_token", deleteOptions);
+        Response.Cookies.Delete("sipenta_refresh_token", deleteOptions);
+
+        var csrfDeleteOptions = new CookieOptions
+        {
+            HttpOnly = false,
+            Secure = isHttps,
+            SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Path = "/"
+        };
+        Response.Cookies.Delete("sipenta_csrf", csrfDeleteOptions);
     }
 
     private string GetClientIp()

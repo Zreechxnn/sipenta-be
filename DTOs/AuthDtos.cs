@@ -17,8 +17,14 @@ public class RegisterRequest
 public class AuthResponse
 {
     public string Token { get; set; } = null!;
+    public string? RefreshToken { get; set; }
     public UserDto User { get; set; } = null!;
     public bool IsNewUser { get; set; }
+}
+
+public class RefreshTokenRequest
+{
+    public string? RefreshToken { get; set; }
 }
 
 public class GoogleLoginRequest

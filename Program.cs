@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Mapster;
@@ -72,6 +73,8 @@ builder.Services.AddSignalR(hubOptions =>
     hubOptions.EnableDetailedErrors = true;
 });
 
+builder.Services.AddDataProtection();
+
 // JWT Authentication
 var jwtOptions = builder.Configuration.GetSection("JwtOptions").Get<JwtOptions>();
 builder.Services.AddAuthentication(options =>
@@ -100,6 +103,9 @@ builder.Services.AddAuthentication(options =>
         {
             var accessToken = context.Request.Query["access_token"];
             var path = context.HttpContext.Request.Path;
+            var dataProtectionProvider = context.HttpContext.RequestServices.GetService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
+            var protector = dataProtectionProvider?.CreateProtector("SIAP.Auth.CookieProtection");
+
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
             {
                 context.Token = accessToken;
@@ -108,7 +114,28 @@ builder.Services.AddAuthentication(options =>
             {
                 if (context.Request.Cookies.TryGetValue("sipenta_token", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
                 {
-                    context.Token = cookieToken;
+                    try
+                    {
+                        context.Token = protector != null ? protector.Unprotect(cookieToken) : cookieToken;
+                    }
+                    catch
+                    {
+                        context.Token = cookieToken;
+                    }
+                }
+            }
+            else if (path.StartsWithSegments("/hubs") && string.IsNullOrEmpty(context.Token))
+            {
+                if (context.Request.Cookies.TryGetValue("sipenta_token", out var hubCookieToken) && !string.IsNullOrEmpty(hubCookieToken))
+                {
+                    try
+                    {
+                        context.Token = protector != null ? protector.Unprotect(hubCookieToken) : hubCookieToken;
+                    }
+                    catch
+                    {
+                        context.Token = hubCookieToken;
+                    }
                 }
             }
             return Task.CompletedTask;
@@ -198,6 +225,7 @@ builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IBidangRepository, BidangRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
 // Parsers
 builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParser, SIAP.Api.Services.Parsers.Implementations.PdfDocumentParser>();
@@ -231,6 +259,7 @@ builder.Services.AddHttpClient<IGroqService, GroqService>();
 builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>();
 builder.Services.AddSingleton<IDocumentProcessingQueue, DocumentProcessingQueue>();
 builder.Services.AddHostedService<DocumentProcessingService>();
+builder.Services.AddHostedService<TokenCleanupBackgroundService>();
 
 // Rate Limiting Config
 builder.Services.AddRateLimiter(options =>
@@ -294,6 +323,7 @@ app.Use(async (context, next) =>
 app.UseRateLimiter();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseMiddleware<CsrfProtectionMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI();

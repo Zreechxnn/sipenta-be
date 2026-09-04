@@ -7,6 +7,7 @@ using SIAP.Api.Repositories.Interfaces;
 using SIAP.Api.Services.Interfaces;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Google.Apis.Auth;
 
@@ -16,18 +17,25 @@ public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
+    private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly JwtOptions _jwtOptions;
     private readonly GoogleOptions _googleOptions;
 
-    public AuthService(IUserRepository userRepository, IRoleRepository roleRepository, IOptions<JwtOptions> jwtOptions, IOptions<GoogleOptions> googleOptions)
+    public AuthService(
+        IUserRepository userRepository, 
+        IRoleRepository roleRepository, 
+        IRefreshTokenRepository refreshTokenRepository,
+        IOptions<JwtOptions> jwtOptions, 
+        IOptions<GoogleOptions> googleOptions)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
+        _refreshTokenRepository = refreshTokenRepository;
         _jwtOptions = jwtOptions.Value;
         _googleOptions = googleOptions.Value;
     }
 
-    public async Task<AuthResponse> LoginAsync(LoginRequest request)
+    public async Task<AuthResponse> LoginAsync(LoginRequest request, string? ipAddress = null)
     {
         var user = await _userRepository.GetByUsernameAsync(request.Username);
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
@@ -36,26 +44,18 @@ public class AuthService : IAuthService
         }
 
         var token = GenerateJwtToken(user);
-        
+        var refreshToken = CreateRefreshToken(user.Id, ipAddress);
+        await _refreshTokenRepository.AddAsync(refreshToken);
+
         return new AuthResponse
         {
             Token = token,
-            User = new UserDto
-            {
-                Id = user.Id,
-                Username = user.Username,
-                Email = user.Email,
-                FullName = user.FullName,
-                Role = user.Role?.Name ?? "user",
-                BidangId = user.BidangId,
-                Bidang = user.Bidang?.Nama,
-                IsApproved = user.IsApproved,
-                CreatedAt = user.CreatedAt
-            }
+            RefreshToken = refreshToken.Token,
+            User = MapToUserDto(user)
         };
     }
 
-    public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
+    public async Task<AuthResponse> RegisterAsync(RegisterRequest request, string? ipAddress = null)
     {
         if (await _userRepository.GetByUsernameAsync(request.Username) != null)
         {
@@ -88,27 +88,19 @@ public class AuthService : IAuthService
         user = await _userRepository.GetByIdAsync(user.Id);
 
         var token = GenerateJwtToken(user!);
+        var refreshToken = CreateRefreshToken(user!.Id, ipAddress);
+        await _refreshTokenRepository.AddAsync(refreshToken);
 
         return new AuthResponse
         {
             Token = token,
-            User = new UserDto
-            {
-                Id = user!.Id,
-                Username = user.Username,
-                Email = user.Email,
-                FullName = user.FullName,
-                Role = user.Role?.Name ?? "user",
-                BidangId = user.BidangId,
-                Bidang = user.Bidang?.Nama,
-                IsApproved = user.IsApproved,
-                CreatedAt = user.CreatedAt
-            },
+            RefreshToken = refreshToken.Token,
+            User = MapToUserDto(user),
             IsNewUser = true
         };
     }
 
-    public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request)
+    public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request, string? ipAddress = null)
     {
         GoogleJsonWebSignature.ValidationSettings settings = new GoogleJsonWebSignature.ValidationSettings
         {
@@ -127,7 +119,7 @@ public class AuthService : IAuthService
 
         var user = await _userRepository.GetByEmailAsync(payload.Email);
         bool isNewUser = false;
-        
+
         if (user == null)
         {
             isNewUser = true;
@@ -153,23 +145,118 @@ public class AuthService : IAuthService
         }
 
         var token = GenerateJwtToken(user!);
+        var refreshToken = CreateRefreshToken(user!.Id, ipAddress);
+        await _refreshTokenRepository.AddAsync(refreshToken);
 
         return new AuthResponse
         {
             Token = token,
-            User = new UserDto
-            {
-                Id = user!.Id,
-                Username = user.Username,
-                Email = user.Email,
-                FullName = user.FullName,
-                Role = user.Role?.Name ?? "user",
-                BidangId = user.BidangId,
-                Bidang = user.Bidang?.Nama,
-                IsApproved = user.IsApproved,
-                CreatedAt = user.CreatedAt
-            },
+            RefreshToken = refreshToken.Token,
+            User = MapToUserDto(user),
             IsNewUser = isNewUser
+        };
+    }
+
+    public async Task<AuthResponse> RefreshTokenAsync(string refreshTokenString, string? ipAddress = null)
+    {
+        if (string.IsNullOrWhiteSpace(refreshTokenString))
+        {
+            throw new Exception("Refresh token tidak valid.");
+        }
+
+        var existingToken = await _refreshTokenRepository.GetByTokenAsync(refreshTokenString);
+        if (existingToken == null)
+        {
+            throw new Exception("Refresh token tidak ditemukan.");
+        }
+
+        // Token reuse detection: if token is already revoked, revoke all tokens for this user for security
+        if (existingToken.IsRevoked)
+        {
+            await _refreshTokenRepository.RevokeAllUserTokensAsync(existingToken.UserId, ipAddress);
+            throw new Exception("Refresh token sudah pernah digunakan atau dinonaktifkan.");
+        }
+
+        if (existingToken.IsExpired)
+        {
+            throw new Exception("Refresh token telah kedaluwarsa. Silakan login kembali.");
+        }
+
+        var user = existingToken.User ?? await _userRepository.GetByIdAsync(existingToken.UserId);
+        if (user == null)
+        {
+            throw new Exception("Pengguna tidak ditemukan.");
+        }
+
+        // Rotate refresh token: generate new 30-min JWT and new 7-day refresh token
+        var newJwt = GenerateJwtToken(user);
+        var newRefreshToken = CreateRefreshToken(user.Id, ipAddress);
+
+        // Mark old token revoked and link to replacement
+        existingToken.RevokedAt = DateTime.UtcNow;
+        existingToken.RevokedByIp = ipAddress;
+        existingToken.ReplacedByToken = newRefreshToken.Token;
+
+        await _refreshTokenRepository.UpdateAsync(existingToken);
+        await _refreshTokenRepository.AddAsync(newRefreshToken);
+
+        return new AuthResponse
+        {
+            Token = newJwt,
+            RefreshToken = newRefreshToken.Token,
+            User = MapToUserDto(user)
+        };
+    }
+
+    public async Task RevokeTokenAsync(string refreshTokenString, string? ipAddress = null)
+    {
+        if (!string.IsNullOrWhiteSpace(refreshTokenString))
+        {
+            await _refreshTokenRepository.RevokeTokenAsync(refreshTokenString, ipAddress);
+        }
+    }
+
+    public async Task RevokeAllUserTokensAsync(Guid userId, string? ipAddress = null)
+    {
+        await _refreshTokenRepository.RevokeAllUserTokensAsync(userId, ipAddress);
+    }
+
+    private RefreshToken CreateRefreshToken(Guid userId, string? ipAddress)
+    {
+        var randomBytes = new byte[64];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomBytes);
+        var tokenString = Convert.ToBase64String(randomBytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+
+        var days = _jwtOptions.RefreshTokenExpiryDays > 0 ? _jwtOptions.RefreshTokenExpiryDays : 7;
+
+        return new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Token = tokenString,
+            ExpiresAt = DateTime.UtcNow.AddDays(days),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = ipAddress
+        };
+    }
+
+    private static UserDto MapToUserDto(User user)
+    {
+        return new UserDto
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FullName = user.FullName,
+            Role = user.Role?.Name ?? "user",
+            BidangId = user.BidangId,
+            Bidang = user.Bidang?.Nama,
+            IsApproved = user.IsApproved,
+            CreatedAt = user.CreatedAt
         };
     }
 
