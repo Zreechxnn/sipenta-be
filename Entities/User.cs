@@ -21,4 +21,5 @@ public class User
     public DateTime? UpdatedAt { get; set; }
 
     public ICollection<DocumentAccess> DocumentAccesses { get; set; } = new List<DocumentAccess>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }
