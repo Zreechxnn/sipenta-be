@@ -170,9 +170,30 @@ public class AuthService : IAuthService
             throw new Exception("Refresh token tidak ditemukan.");
         }
 
-        // Token reuse detection: if token is already revoked, revoke all tokens for this user for security
+        // Token reuse detection: if token is already revoked, check for rotation grace window (e.g. concurrent client requests)
         if (existingToken.IsRevoked)
         {
+            if (existingToken.RevokedAt.HasValue &&
+                DateTime.UtcNow - existingToken.RevokedAt.Value < TimeSpan.FromSeconds(30) &&
+                !string.IsNullOrEmpty(existingToken.ReplacedByToken))
+            {
+                var replacementToken = await _refreshTokenRepository.GetByTokenAsync(existingToken.ReplacedByToken);
+                if (replacementToken != null && !replacementToken.IsRevoked && !replacementToken.IsExpired)
+                {
+                    var replacementUser = replacementToken.User ?? await _userRepository.GetByIdAsync(replacementToken.UserId);
+                    if (replacementUser != null)
+                    {
+                        var replacementJwt = GenerateJwtToken(replacementUser);
+                        return new AuthResponse
+                        {
+                            Token = replacementJwt,
+                            RefreshToken = replacementToken.Token,
+                            User = MapToUserDto(replacementUser)
+                        };
+                    }
+                }
+            }
+
             await _refreshTokenRepository.RevokeAllUserTokensAsync(existingToken.UserId, ipAddress);
             throw new Exception("Refresh token sudah pernah digunakan atau dinonaktifkan.");
         }
