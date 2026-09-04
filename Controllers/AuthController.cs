@@ -60,14 +60,14 @@ public class AuthController : ControllerBase
             // Reset failed attempt counter on success
             await _rateLimiter.ResetAttemptsAsync(request.Username, ip);
 
-            // Set secure HttpOnly session cookies for encrypted JWT & encrypted Refresh Token (cleared when browser closes)
+            // Set secure HttpOnly session cookies for JWT & Refresh Token (cleared when browser closes)
             SetAuthCookies(response.Token, response.RefreshToken);
 
             var expiry = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30);
             return Ok(new AuthResponse
             {
-                Token = "hidden-httponly-token",
-                RefreshToken = null,
+                Token = response.Token,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -107,7 +107,7 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.RegisterAsync(request, ip);
 
-            // Set secure HttpOnly session cookies for encrypted JWT & Refresh Token
+            // Set secure HttpOnly session cookies for JWT & Refresh Token
             SetAuthCookies(response.Token, response.RefreshToken);
 
             // Broadcast SignalR event to admins for real-time user registration
@@ -116,8 +116,8 @@ public class AuthController : ControllerBase
             var expiry = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30);
             return Ok(new AuthResponse
             {
-                Token = "hidden-httponly-token",
-                RefreshToken = null,
+                Token = response.Token,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = true,
                 ExpiresAt = expiry
@@ -137,7 +137,7 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.GoogleLoginAsync(request, ip);
             
-            // Set secure HttpOnly session cookies for encrypted JWT & Refresh Token
+            // Set secure HttpOnly session cookies for JWT & Refresh Token
             SetAuthCookies(response.Token, response.RefreshToken);
 
             if (response.IsNewUser)
@@ -149,8 +149,8 @@ public class AuthController : ControllerBase
             var expiry = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30);
             return Ok(new AuthResponse
             {
-                Token = "hidden-httponly-token",
-                RefreshToken = null,
+                Token = response.Token,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = response.IsNewUser,
                 ExpiresAt = expiry
@@ -167,16 +167,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest? request)
     {
         var refreshToken = request?.RefreshToken;
-        if (string.IsNullOrEmpty(refreshToken) && Request.Cookies.TryGetValue("sipenta_refresh_token", out var protectedRefreshToken) && !string.IsNullOrEmpty(protectedRefreshToken))
+        if (string.IsNullOrEmpty(refreshToken) && Request.Cookies.TryGetValue("sipenta_refresh_token", out var cookieRefreshToken) && !string.IsNullOrEmpty(cookieRefreshToken))
         {
-            try
-            {
-                refreshToken = _dataProtector.Unprotect(protectedRefreshToken);
-            }
-            catch
-            {
-                refreshToken = protectedRefreshToken;
-            }
+            refreshToken = cookieRefreshToken;
         }
 
         if (string.IsNullOrEmpty(refreshToken))
@@ -190,14 +183,14 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.RefreshTokenAsync(refreshToken, ip);
 
-            // Set new encrypted session cookies for rotated tokens
+            // Set new session cookies for rotated tokens
             SetAuthCookies(response.Token, response.RefreshToken);
 
             var expiry = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30);
             return Ok(new AuthResponse
             {
-                Token = "hidden-httponly-token",
-                RefreshToken = null,
+                Token = response.Token,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -216,16 +209,9 @@ public class AuthController : ControllerBase
         var ip = GetClientIp();
 
         var refreshToken = request?.RefreshToken;
-        if (string.IsNullOrEmpty(refreshToken) && Request.Cookies.TryGetValue("sipenta_refresh_token", out var protectedRefreshToken) && !string.IsNullOrEmpty(protectedRefreshToken))
+        if (string.IsNullOrEmpty(refreshToken) && Request.Cookies.TryGetValue("sipenta_refresh_token", out var cookieRefreshToken) && !string.IsNullOrEmpty(cookieRefreshToken))
         {
-            try
-            {
-                refreshToken = _dataProtector.Unprotect(protectedRefreshToken);
-            }
-            catch
-            {
-                refreshToken = protectedRefreshToken;
-            }
+            refreshToken = cookieRefreshToken;
         }
 
         if (!string.IsNullOrEmpty(refreshToken))
@@ -254,9 +240,6 @@ public class AuthController : ControllerBase
             || (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && proto.ToString().Equals("https", StringComparison.OrdinalIgnoreCase))
             || !Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
 
-        // Encrypt the token using ASP.NET Core Data Protection (AES-256) so it cannot be read in DevTools Cookies
-        var protectedToken = _dataProtector.Protect(token);
-
         // Omitting Expires and MaxAge creates a browser Session Cookie.
         // The browser discards session cookies as soon as the browser / window is closed.
         var cookieOptions = new CookieOptions
@@ -267,12 +250,17 @@ public class AuthController : ControllerBase
             Path = "/"
         };
 
-        Response.Cookies.Append("sipenta_token", protectedToken, cookieOptions);
+        try
+        {
+            cookieOptions.Extensions.Add("Partitioned");
+        }
+        catch {}
+
+        Response.Cookies.Append("sipenta_token", token, cookieOptions);
 
         if (!string.IsNullOrEmpty(refreshToken))
         {
-            var protectedRefreshToken = _dataProtector.Protect(refreshToken);
-            Response.Cookies.Append("sipenta_refresh_token", protectedRefreshToken, cookieOptions);
+            Response.Cookies.Append("sipenta_refresh_token", refreshToken, cookieOptions);
         }
 
         // Issue Double-Submit CSRF Cookie (readable by frontend script for X-CSRF-Token header)
@@ -284,6 +272,12 @@ public class AuthController : ControllerBase
             SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
             Path = "/"
         };
+        try
+        {
+            csrfCookieOptions.Extensions.Add("Partitioned");
+        }
+        catch {}
+
         Response.Cookies.Append("sipenta_csrf", csrfToken, csrfCookieOptions);
     }
 

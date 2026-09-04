@@ -103,31 +103,22 @@ builder.Services.AddAuthentication(options =>
         {
             var accessToken = context.Request.Query["access_token"].ToString();
             var path = context.HttpContext.Request.Path;
-            var dataProtectionProvider = context.HttpContext.RequestServices.GetService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
-            var protector = dataProtectionProvider?.CreateProtector("SIAP.Auth.CookieProtection");
 
-            // 1. Check if real JWT query parameter was provided (WebSockets)
+            // 1. Check if real JWT query parameter was provided (SignalR WebSockets)
             if (!string.IsNullOrEmpty(accessToken) && 
                 accessToken != "hidden-httponly-token" && 
                 accessToken != "session-active" && 
-                path.StartsWithSegments("/hubs"))
+                (path.StartsWithSegments("/hubs") || path.StartsWithSegments("/chatHub")))
             {
                 context.Token = accessToken;
             }
 
-            // 2. If no token found from header or query, extract and decrypt from HttpOnly session cookie
+            // 2. If no token found from header or query, extract from cookie
             if (string.IsNullOrEmpty(context.Token))
             {
                 if (context.Request.Cookies.TryGetValue("sipenta_token", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
                 {
-                    try
-                    {
-                        context.Token = protector != null ? protector.Unprotect(cookieToken) : cookieToken;
-                    }
-                    catch
-                    {
-                        context.Token = cookieToken;
-                    }
+                    context.Token = cookieToken;
                 }
             }
 
