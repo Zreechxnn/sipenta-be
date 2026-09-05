@@ -231,34 +231,53 @@ public class AuthController : ControllerBase
             || (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && proto.ToString().Equals("https", StringComparison.OrdinalIgnoreCase))
             || !Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
 
-        var cookieOptions = new CookieOptions
+        var tokenMinutes = _jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30;
+        var tokenCookieOptions = new CookieOptions
         {
             HttpOnly = true,
             Secure = isHttps,
             SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
-            Path = "/"
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow.AddMinutes(tokenMinutes)
         };
 
         try
         {
-            cookieOptions.Extensions.Add("Partitioned");
+            tokenCookieOptions.Extensions.Add("Partitioned");
         }
         catch {}
 
-        Response.Cookies.Append("sipenta_token", token, cookieOptions);
+        Response.Cookies.Append("sipenta_token", token, tokenCookieOptions);
 
         if (!string.IsNullOrEmpty(refreshToken))
         {
-            Response.Cookies.Append("sipenta_refresh_token", refreshToken, cookieOptions);
+            var refreshDays = _jwtOptions.RefreshTokenExpiryDays > 0 ? _jwtOptions.RefreshTokenExpiryDays : 1;
+            var refreshCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = isHttps,
+                SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
+                Path = "/",
+                Expires = DateTimeOffset.UtcNow.AddDays(refreshDays)
+            };
+            try
+            {
+                refreshCookieOptions.Extensions.Add("Partitioned");
+            }
+            catch {}
+
+            Response.Cookies.Append("sipenta_refresh_token", refreshToken, refreshCookieOptions);
         }
 
         var csrfToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        var csrfDays = _jwtOptions.RefreshTokenExpiryDays > 0 ? _jwtOptions.RefreshTokenExpiryDays : 1;
         var csrfCookieOptions = new CookieOptions
         {
             HttpOnly = false,
             Secure = isHttps,
             SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
-            Path = "/"
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow.AddDays(csrfDays)
         };
         try
         {

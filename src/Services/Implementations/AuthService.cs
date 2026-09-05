@@ -43,6 +43,9 @@ public class AuthService : IAuthService
             throw new Exception("Username atau kata sandi tidak valid.");
         }
 
+        // Invalidate previous active sessions to prevent token accumulation in DB
+        await _refreshTokenRepository.RevokeAllUserTokensAsync(user.Id, ipAddress);
+
         var token = GenerateJwtToken(user);
         var refreshToken = CreateRefreshToken(user.Id, ipAddress);
         await _refreshTokenRepository.AddAsync(refreshToken);
@@ -143,6 +146,9 @@ public class AuthService : IAuthService
             await _userRepository.AddAsync(user);
             user = await _userRepository.GetByIdAsync(user.Id);
         }
+
+        // Invalidate previous active sessions to prevent token accumulation in DB
+        await _refreshTokenRepository.RevokeAllUserTokensAsync(user!.Id, ipAddress);
 
         var token = GenerateJwtToken(user!);
         var refreshToken = CreateRefreshToken(user!.Id, ipAddress);
@@ -252,7 +258,7 @@ public class AuthService : IAuthService
             .Replace("/", "_")
             .TrimEnd('=');
 
-        var days = _jwtOptions.RefreshTokenExpiryDays > 0 ? _jwtOptions.RefreshTokenExpiryDays : 7;
+        var days = _jwtOptions.RefreshTokenExpiryDays > 0 ? _jwtOptions.RefreshTokenExpiryDays : 1;
 
         return new RefreshToken
         {

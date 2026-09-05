@@ -66,20 +66,11 @@ public class RefreshTokenRepository : IRefreshTokenRepository
     public async Task RevokeAllUserTokensAsync(Guid userId, string? ipAddress = null)
     {
         var now = DateTime.UtcNow;
-        var activeTokens = await _context.RefreshTokens
+        await _context.RefreshTokens
             .Where(r => r.UserId == userId && r.RevokedAt == null)
-            .ToListAsync();
-
-        if (activeTokens.Count > 0)
-        {
-            foreach (var token in activeTokens)
-            {
-                token.RevokedAt = now;
-                token.RevokedByIp = ipAddress;
-            }
-            _context.RefreshTokens.UpdateRange(activeTokens);
-            await _context.SaveChangesAsync();
-        }
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.RevokedAt, now)
+                .SetProperty(r => r.RevokedByIp, ipAddress));
     }
 
     public async Task<int> CleanupStaleTokensAsync(TimeSpan? revokedGracePeriod = null, CancellationToken cancellationToken = default)
