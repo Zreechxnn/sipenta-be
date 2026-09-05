@@ -64,7 +64,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -111,7 +111,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = true,
                 ExpiresAt = expiry
@@ -142,7 +142,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = response.IsNewUser,
                 ExpiresAt = expiry
@@ -181,7 +181,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = response.RefreshToken,
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
