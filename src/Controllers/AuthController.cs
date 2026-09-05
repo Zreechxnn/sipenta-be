@@ -39,7 +39,6 @@ public class AuthController : ControllerBase
     {
         var ip = GetClientIp();
 
-        // 1. Check if user/IP is currently locked out
         var lockoutStatus = await _rateLimiter.CheckLockoutAsync(request.Username, ip);
         if (lockoutStatus.IsLockedOut)
         {
@@ -57,17 +56,15 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.LoginAsync(request, ip);
 
-            // Reset failed attempt counter on success
             await _rateLimiter.ResetAttemptsAsync(request.Username, ip);
 
-            // Set secure HttpOnly session cookies for JWT & Refresh Token (cleared when browser closes)
             SetAuthCookies(response.Token, response.RefreshToken);
 
             var expiry = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30);
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie, never expose in JSON!
+                RefreshToken = null,
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -75,7 +72,6 @@ public class AuthController : ControllerBase
         }
         catch (Exception)
         {
-            // Record failed attempt
             var failStatus = await _rateLimiter.RecordFailedAttemptAsync(request.Username, ip);
 
             if (failStatus.IsLockedOut)
@@ -107,17 +103,15 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.RegisterAsync(request, ip);
 
-            // Set secure HttpOnly session cookies for JWT & Refresh Token
             SetAuthCookies(response.Token, response.RefreshToken);
 
-            // Broadcast SignalR event to admins for real-time user registration
             await _hubContext.Clients.All.SendAsync("UserRegistered", new { username = request.Username, email = request.Email });
 
             var expiry = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30);
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie
+                RefreshToken = null,
                 User = response.User,
                 IsNewUser = true,
                 ExpiresAt = expiry
@@ -137,12 +131,10 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.GoogleLoginAsync(request, ip);
             
-            // Set secure HttpOnly session cookies for JWT & Refresh Token
             SetAuthCookies(response.Token, response.RefreshToken);
 
             if (response.IsNewUser)
             {
-                // Broadcast SignalR event to admins for real-time user registration
                 await _hubContext.Clients.All.SendAsync("UserRegistered", new { username = response.User.Username, email = response.User.Email });
             }
 
@@ -150,7 +142,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie
+                RefreshToken = null,
                 User = response.User,
                 IsNewUser = response.IsNewUser,
                 ExpiresAt = expiry
@@ -183,14 +175,13 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.RefreshTokenAsync(refreshToken, ip);
 
-            // Set new session cookies for rotated tokens
             SetAuthCookies(response.Token, response.RefreshToken);
 
             var expiry = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes > 0 ? _jwtOptions.ExpiryMinutes : 30);
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null, // Strictly keep refresh token in HttpOnly cookie
+                RefreshToken = null,
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -240,8 +231,6 @@ public class AuthController : ControllerBase
             || (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && proto.ToString().Equals("https", StringComparison.OrdinalIgnoreCase))
             || !Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
 
-        // Omitting Expires and MaxAge creates a browser Session Cookie.
-        // The browser discards session cookies as soon as the browser / window is closed.
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
@@ -263,11 +252,10 @@ public class AuthController : ControllerBase
             Response.Cookies.Append("sipenta_refresh_token", refreshToken, cookieOptions);
         }
 
-        // Issue Double-Submit CSRF Cookie (readable by frontend script for X-CSRF-Token header)
         var csrfToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         var csrfCookieOptions = new CookieOptions
         {
-            HttpOnly = false, // Client JavaScript reads this to attach X-CSRF-Token header
+            HttpOnly = false,
             Secure = isHttps,
             SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
             Path = "/"

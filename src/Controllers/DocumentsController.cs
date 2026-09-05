@@ -76,14 +76,11 @@ public class DocumentsController : ControllerBase
             var isSuperAdmin = User.IsInRole("admin");
             if (!isSuperAdmin)
             {
-                // Untuk Admin (Kasubag) dan User (Tenaga Ahli):
-                // Dokumen HANYA dan OTOMATIS diunggah ke bidang miliknya sendiri
                 request.BidangId = userBidangId;
                 request.Bidang = userBidang;
             }
             else
             {
-                // Hanya Super-Admin yang memiliki hak lintas bidang dan bisa menentukan bidang tujuan
                 if (!request.BidangId.HasValue && !string.IsNullOrWhiteSpace(request.Bidang))
                 {
                     var b = await _dbContext.Bidangs.FirstOrDefaultAsync(x =>
@@ -107,7 +104,6 @@ public class DocumentsController : ControllerBase
 
             var result = await _service.UploadAsync(request);
             
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("DocumentCreated", result);
 
             return Ok(ApiResponse<List<DocumentResponseDto>>.Ok(result, "Dokumen berhasil diupload."));
@@ -227,7 +223,6 @@ public class DocumentsController : ControllerBase
         }
     }
 
-    // Document Sharing Endpoints
     [HttpGet("{id}/shares")]
     public async Task<IActionResult> GetShares(string id)
     {
@@ -269,7 +264,6 @@ public class DocumentsController : ControllerBase
 
             var result = await _service.ShareAsync(docId, request.Username, userId.Value, isAdmin);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("DocumentShared", new { DocumentId = docId, SharedUser = result });
 
             return Ok(ApiResponse<DocumentAccessUserDto>.Ok(result, $"Akses baca dokumen berhasil diberikan ke @{result.Username}"));
@@ -301,7 +295,6 @@ public class DocumentsController : ControllerBase
 
             await _service.RevokeAccessAsync(docId, targetId, userId.Value, isAdmin);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("DocumentAccessRevoked", new { DocumentId = docId, TargetUserId = targetId });
 
             return Ok(ApiResponse<bool>.Ok(true, "Hak akses berhasil dicabut."));
@@ -354,14 +347,12 @@ public class DocumentsController : ControllerBase
 
             if (!isAdmin)
             {
-                // Kasubag dan User biasa tidak dapat memindahkan dokumen ke bidang lain
                 request.BidangId = doc.BidangId ?? userBidangId;
                 request.Bidang = userBidang;
             }
 
             var result = await _service.UpdateAsync(guidId, request);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("DocumentUpdated", result);
 
             return Ok(ApiResponse<DocumentResponseDto>.Ok(result, "Dokumen berhasil diupdate."));
@@ -456,7 +447,6 @@ public class DocumentsController : ControllerBase
 
             await _service.DeleteAsync(guidId);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("DocumentDeleted", id);
 
             return Ok(ApiResponse<bool>.Ok(true, "Dokumen berhasil dihapus."));

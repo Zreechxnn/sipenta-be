@@ -48,7 +48,6 @@ public class UserController : ControllerBase
             }
             catch
             {
-                // ignore
             }
         }
 
@@ -90,7 +89,6 @@ public class UserController : ControllerBase
 
             var user = await _userService.UpdateProfileAsync(userId, request);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("UserUpdated", user);
 
             return Ok(user);
@@ -165,19 +163,13 @@ public class UserController : ControllerBase
                     return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
                 }
 
-                // Lock created user to Admin's bidang and 'user' (Tenaga Ahli) role
                 request.BidangId = bidangId.Value;
                 request.Bidang = null;
                 request.RoleId = 3;
             }
-            else if (request.RoleId == 2 || request.RoleId == 4)
-            {
-                // Super Admin can create admin or super-admin
-            }
 
             var user = await _userService.CreateUserAsync(request);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("UserCreated", user);
 
             return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, user);
@@ -208,7 +200,6 @@ public class UserController : ControllerBase
                     return Forbid("Admin/Kasubag hanya bisa mengubah Tenaga Ahli di bidangnya sendiri.");
                 }
 
-                // Enforce Admin's bidang
                 request.BidangId = bidangId.Value;
                 request.Bidang = null;
 
@@ -220,7 +211,6 @@ public class UserController : ControllerBase
 
             var user = await _userService.UpdateUserAsync(id, request);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("UserUpdated", user);
 
             return Ok(user);
@@ -249,14 +239,12 @@ public class UserController : ControllerBase
                     return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
                 }
 
-                // When Admin/Kasubag approves, the user AUTOMATICALLY becomes Tenaga Ahli in Admin's bidang!
                 request.BidangId = bidangId.Value;
                 request.Bidang = null;
             }
 
             var user = await _userService.ApproveUserAsync(id, request);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("UserUpdated", user);
 
             return Ok(user);
@@ -295,7 +283,6 @@ public class UserController : ControllerBase
 
             await _userService.DeleteUserAsync(id);
 
-            // Broadcast SignalR event
             await _hubContext.Clients.All.SendAsync("UserDeleted", id);
 
             return NoContent();

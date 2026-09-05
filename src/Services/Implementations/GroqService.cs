@@ -29,7 +29,6 @@ public class GroqService : IGroqService
         var defaultModel = "openai/gpt-oss-120b";
         var defaultImageModel = "llama-3.2-11b-vision-preview";
 
-        // 1. Primary config (Llm:ApiKey, Llm:BaseUrl, Llm:Model, Llm:Image)
         var primaryKey = configuration["Llm:ApiKey"] ?? string.Empty;
         var primaryUrl = configuration["Llm:BaseUrl"] ?? defaultBaseUrl;
         var primaryModel = configuration["Llm:Model"] ?? defaultModel;
@@ -40,7 +39,6 @@ public class GroqService : IGroqService
             _configs.Add(new LlmEndpointConfig(primaryKey.Trim(), primaryUrl.Trim(), primaryModel.Trim(), primaryImage.Trim(), "Primary (Llm)"));
         }
 
-        // 2. Secondary & subsequent configs (Llm:ApiKey2, Llm:ApiKey3, etc.)
         for (int i = 2; i <= 10; i++)
         {
             var key = configuration[$"Llm:ApiKey{i}"] ?? configuration[$"Llm:apikey{i}"];
@@ -86,7 +84,6 @@ public class GroqService : IGroqService
         var imageList = images?.Where(img => img.Bytes != null && img.Bytes.Length > 0).ToList();
         if (imageList != null && imageList.Any())
         {
-            // Build Vision Content parts for user message
             var contentParts = new List<object>
             {
                 new { type = "text", text = userMessage }
@@ -118,7 +115,6 @@ public class GroqService : IGroqService
 
             var visionResult = await SendWithFallbackAsync(visionMessages, isVision: true, cancellationToken);
 
-            // If vision completion succeeded without errors, return it
             if (!string.IsNullOrWhiteSpace(visionResult) && 
                 !visionResult.StartsWith("Terjadi kesalahan") && 
                 !visionResult.StartsWith("Llm API Key is not") &&
@@ -130,7 +126,6 @@ public class GroqService : IGroqService
             _logger?.LogWarning("Vision LLM completion failed across endpoints ({VisionResult}). Falling back to text-only model...", visionResult);
         }
 
-        // Fallback or text-only completion
         var textMessages = new List<object>
         {
             new { role = "system", content = (object)systemPrompt }
@@ -146,16 +141,15 @@ public class GroqService : IGroqService
 
     private async Task<string> SendWithFallbackAsync(IEnumerable<object> messages, bool isVision, CancellationToken cancellationToken)
     {
-        if (_configs.Count == 0)
+        if (!_configs.Any())
         {
-            return "Llm API Key is not configured.";
+            return "Llm API Key is not configured in environment variables or appsettings.json. Please configure Llm:ApiKey.";
         }
 
         var errors = new List<string>();
 
-        for (int i = 0; i < _configs.Count; i++)
+        foreach (var config in _configs)
         {
-            var config = _configs[i];
             var selectedModel = isVision ? config.ImageModel : config.Model;
             try
             {
@@ -163,27 +157,31 @@ public class GroqService : IGroqService
                 {
                     model = selectedModel,
                     messages = messages,
-                    temperature = 0.1,
-                    max_tokens = 3000
+                    temperature = 0.3,
+                    max_completion_tokens = 4096
                 };
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, config.BaseUrl);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
-                request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", config.ApiKey);
+                request.Content = new StringContent(
+                    JsonSerializer.Serialize(requestBody), 
+                    Encoding.UTF8, 
+                    "application/json"
+                );
 
-                var response = await _httpClient.SendAsync(request, cancellationToken);
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var errorDetail = await response.Content.ReadAsStringAsync(cancellationToken);
                     var statusCode = (int)response.StatusCode;
+                    var errorDetail = await response.Content.ReadAsStringAsync(cancellationToken);
                     var errorMsg = $"[{config.Name}] Status {statusCode}: {errorDetail}";
                     
                     _logger?.LogWarning("LLM Request to {Name} ({Url} - {Model}) failed with status {StatusCode}. Details: {ErrorDetail}. Attempting next config...", 
                         config.Name, config.BaseUrl, selectedModel, statusCode, errorDetail);
                     
                     errors.Add(errorMsg);
-                    continue; // Coba endpoint / API key berikutnya
+                    continue;
                 }
 
                 var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -196,7 +194,6 @@ public class GroqService : IGroqService
 
                 if (!string.IsNullOrEmpty(answer))
                 {
-                    // Clean up <think>...</think> tags if model produces reasoning output
                     answer = System.Text.RegularExpressions.Regex.Replace(answer, @"<think>[\s\S]*?</think>", "").Trim();
                 }
 
@@ -210,7 +207,6 @@ public class GroqService : IGroqService
             }
         }
 
-        // Jika semua API Key / Endpoint gagal
         if (errors.Any(e => e.Contains("429") || e.Contains("Rate limit") || e.Contains("rate_limit")))
         {
             return "Mohon maaf, seluruh kuota layanan AI sedang sibuk atau mencapai batas limit (Rate Limit). Silakan coba beberapa saat lagi.";
