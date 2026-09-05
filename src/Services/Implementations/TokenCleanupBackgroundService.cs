@@ -14,9 +14,9 @@ public class TokenCleanupBackgroundService : BackgroundService
 {
     private readonly ILogger<TokenCleanupBackgroundService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly TimeSpan _checkInterval = TimeSpan.FromHours(6); // Dijalankan tiap 6 jam
+    private readonly TimeSpan _checkInterval = TimeSpan.FromHours(2); // Dijalankan tiap 2 jam
     private readonly TimeSpan _initialDelay = TimeSpan.FromSeconds(15); // Jeda startup aplikasi
-    private readonly TimeSpan _revokedGracePeriod = TimeSpan.FromHours(24); // Retensi 24 jam untuk token revoked
+    private readonly TimeSpan _revokedGracePeriod = TimeSpan.FromHours(2); // Retensi 2 jam untuk token revoked
 
     public TokenCleanupBackgroundService(
         ILogger<TokenCleanupBackgroundService> logger,
