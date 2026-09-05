@@ -86,7 +86,6 @@ public class DocumentProcessingService : BackgroundService
             await repository.UpdateAsync(document);
             _logger.LogInformation("Processing started for document {DocumentId}", documentId);
 
-            // Broadcast status change to Processing using clean DTO payload
             try
             {
                 await _hubContext.Clients.All.SendAsync("DocumentUpdated", MapToDtoPayload(document));
@@ -100,7 +99,7 @@ public class DocumentProcessingService : BackgroundService
             var extension = Path.GetExtension(document.NamaFile);
             
             var detectionResult = await detectionService.DetectAsync(fileStream, extension, document.MimeType);
-            fileStream.Position = 0; // Reset stream
+            fileStream.Position = 0;
 
             if (document.Content != null)
             {
@@ -176,7 +175,6 @@ public class DocumentProcessingService : BackgroundService
 
             if (document.Status != DocumentStatus.Failed)
             {
-                // 1. Try Extract/enhance Metadata using LLM first for high-accuracy typo correction & clean titles
                 try 
                 {
                     await ExtractMetadataWithLlmAsync(document, scope.ServiceProvider, stoppingToken);
@@ -186,7 +184,6 @@ public class DocumentProcessingService : BackgroundService
                     _logger.LogWarning(ex, "Failed to extract metadata with LLM for document {DocumentId}", documentId);
                 }
 
-                // 2. Extract Images from PDF using iText 7
                 if (extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
                 {
                     try
@@ -202,7 +199,6 @@ public class DocumentProcessingService : BackgroundService
                             var oldImages = dbContext.DocumentImages.Where(di => di.DocumentId == document.Id);
                             dbContext.DocumentImages.RemoveRange(oldImages);
 
-                            // Upload images to Google Drive concurrently to drastically speed up processing
                             var uploadTasks = extractedImages.Select(async (img, index) => 
                             {
                                 var imgIndex = index + 1;
@@ -241,17 +237,14 @@ public class DocumentProcessingService : BackgroundService
                     }
                 }
 
-                // 3. Fallback/enrich any remaining empty fields with deterministic NLP/regex rules
                 if (document.Content != null && !string.IsNullOrWhiteSpace(document.Content.RawText))
                 {
                     SIAP.Api.Common.DocumentHelper.EnrichDocumentMetadata(document, document.Content.RawText);
                 }
 
-                // 4. Chunking
                 var chunkService = scope.ServiceProvider.GetRequiredService<IChunkService>();
                 await chunkService.ProcessChunksAsync(document.Id, null, stoppingToken);
 
-                // Re-fetch document if it was modified by Chunking strategy
                 document = await repository.GetByIdAsync(documentId) ?? document;
 
                 if (string.IsNullOrWhiteSpace(document.NamaTenagaAhli)) document.NamaTenagaAhli = "-";
@@ -271,7 +264,6 @@ public class DocumentProcessingService : BackgroundService
             await repository.UpdateAsync(document);
             _logger.LogInformation("Processing completed for document {DocumentId} in {DurationMs} ms", documentId, stopWatch.ElapsedMilliseconds);
 
-            // Broadcast real-time update using clean DTO payload (Metadata auto-generated!)
             try
             {
                 await _hubContext.Clients.All.SendAsync("DocumentUpdated", MapToDtoPayload(document));
@@ -335,11 +327,10 @@ public class DocumentProcessingService : BackgroundService
             var llmService = serviceProvider.GetRequiredService<IGroqService>();
             var logger = serviceProvider.GetRequiredService<ILogger<DocumentProcessingService>>();
             
-            // Limit text size to prevent token limits and speed up generation
             var rawText = document.Content.RawText;
             if (rawText.Length > 3000)
             {
-                rawText = rawText.Substring(0, 3000); // Send first 3,000 chars (usually covers cover page & TOC)
+                rawText = rawText.Substring(0, 3000);
             }
 
             var prompt = $@"
@@ -368,7 +359,6 @@ Jika ada data yang tidak ditemukan, beri string kosong """".
 
             if (!string.IsNullOrWhiteSpace(result))
             {
-                // Clean up result if it has markdown formatting
                 var cleanJson = result.Trim();
                 if (cleanJson.StartsWith("```json"))
                 {

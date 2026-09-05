@@ -12,20 +12,26 @@ public class CsrfProtectionMiddleware
         "GET", "HEAD", "OPTIONS", "TRACE"
     };
 
-    private static readonly HashSet<string> AllowedOrigins = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "https://siap-fe.rechanpage.my.id",
-        "https://sipenta-fe.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001"
-    };
+    private readonly HashSet<string> _allowedOrigins;
 
-    public CsrfProtectionMiddleware(RequestDelegate next, ILogger<CsrfProtectionMiddleware> logger)
+    public CsrfProtectionMiddleware(RequestDelegate next, ILogger<CsrfProtectionMiddleware> logger, IConfiguration configuration)
     {
         _next = next;
         _logger = logger;
+
+        _allowedOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var allowedOriginsConfig = configuration["Cors:AllowedOrigins"];
+        if (!string.IsNullOrWhiteSpace(allowedOriginsConfig))
+        {
+            foreach (var origin in allowedOriginsConfig.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = origin.Trim().TrimEnd('/');
+                if (!string.IsNullOrEmpty(trimmed))
+                {
+                    _allowedOrigins.Add(trimmed);
+                }
+            }
+        }
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -122,11 +128,12 @@ public class CsrfProtectionMiddleware
         await _next(context);
     }
 
-    private static bool IsOriginAllowed(string origin, string currentHost)
+    private bool IsOriginAllowed(string origin, string currentHost)
     {
         if (string.IsNullOrWhiteSpace(origin)) return false;
 
-        if (AllowedOrigins.Contains(origin)) return true;
+        var cleanOrigin = origin.TrimEnd('/');
+        if (_allowedOrigins.Contains(cleanOrigin)) return true;
 
         if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
         {
@@ -134,9 +141,7 @@ public class CsrfProtectionMiddleware
                 return true;
 
             if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-                uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-                origin.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase) ||
-                origin.EndsWith(".rechanpage.my.id", StringComparison.OrdinalIgnoreCase))
+                uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

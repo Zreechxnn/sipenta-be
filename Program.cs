@@ -18,32 +18,27 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load .env file
 DotNetEnv.Env.Load();
 builder.Configuration.AddEnvironmentVariables();
 
-// Serilog
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .CreateLogger();
 builder.Host.UseSerilog();
 
-// Configure Kestrel Server Limits for batch document uploads (500 MB)
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
-    serverOptions.Limits.MaxRequestBodySize = 524_288_000; // 500 MB
+    serverOptions.Limits.MaxRequestBodySize = 524_288_000;
 });
 
-// Configure Form Options for large multidocument multipart uploads
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
     options.ValueLengthLimit = int.MaxValue;
-    options.MultipartBodyLengthLimit = 524_288_000; // 500 MB
+    options.MultipartBodyLengthLimit = 524_288_000;
     options.MultipartHeadersLengthLimit = int.MaxValue;
     options.ValueCountLimit = 5000;
 });
 
-// Konfigurasi Options
 builder.Services.Configure<ConnectionStrings>(builder.Configuration.GetSection("ConnectionStrings"));
 builder.Services.Configure<ChunkOptions>(builder.Configuration.GetSection("ChunkOptions"));
 builder.Services.Configure<OcrOptions>(builder.Configuration.GetSection("Ocr"));
@@ -51,32 +46,31 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("JwtOpti
 builder.Services.Configure<GoogleOptions>(builder.Configuration.GetSection("Google"));
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// DbContext PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseNpgsql(connectionString, o => o.UseVector());
 });
 
-// Mapster
 MapsterConfig.RegisterMappings();
 builder.Services.AddMapster();
 builder.Services.AddScoped<IMapper, Mapper>();
 
-// FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddFluentValidationAutoValidation();
 
-// SignalR
 builder.Services.AddSignalR(hubOptions =>
 {
-    hubOptions.MaximumReceiveMessageSize = 10 * 1024 * 1024; // 10 MB
+    hubOptions.MaximumReceiveMessageSize = 10 * 1024 * 1024;
     hubOptions.EnableDetailedErrors = true;
 });
 
 builder.Services.AddDataProtection();
 
-// JWT Authentication
 var jwtOptions = builder.Configuration.GetSection("JwtOptions").Get<JwtOptions>();
+if (jwtOptions == null || string.IsNullOrWhiteSpace(jwtOptions.Key))
+{
+    throw new InvalidOperationException("Kunci JWT (JwtOptions:Key) belum dikonfigurasi. Pastikan JwtOptions__Key telah disetel di file .env!");
+}
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
@@ -104,7 +98,6 @@ builder.Services.AddAuthentication(options =>
             var accessToken = context.Request.Query["access_token"].ToString();
             var path = context.HttpContext.Request.Path;
 
-            // 1. Check if real JWT query parameter was provided (SignalR WebSockets)
             if (!string.IsNullOrEmpty(accessToken) && 
                 accessToken != "hidden-httponly-token" && 
                 accessToken != "session-active" && 
@@ -113,7 +106,6 @@ builder.Services.AddAuthentication(options =>
                 context.Token = accessToken;
             }
 
-            // 2. If no token found from header or query, extract from cookie
             if (string.IsNullOrEmpty(context.Token))
             {
                 if (context.Request.Cookies.TryGetValue("sipenta_token", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
@@ -128,13 +120,11 @@ builder.Services.AddAuthentication(options =>
 });
 builder.Services.AddAuthorization();
 
-// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "SIAP API", Version = "v1" });
     
-    // Add JWT Authentication to Swagger
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -161,33 +151,35 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Health Checks
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>(name: "PostgreSQL");
 
-// CORS
+var allowedOriginsConfig = builder.Configuration["Cors:AllowedOrigins"];
+if (string.IsNullOrWhiteSpace(allowedOriginsConfig))
+{
+    throw new InvalidOperationException("Konfigurasi CORS (Cors:AllowedOrigins) belum disetel di file .env!");
+}
+
+var allowedOrigins = allowedOriginsConfig
+    .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+    .Select(o => o.Trim().TrimEnd('/'))
+    .Where(o => !string.IsNullOrEmpty(o))
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        var allowedOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "https://siap-fe.rechanpage.my.id",
-            "https://sipenta-fe.vercel.app",
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:3001"
-        };
-
         policy.SetIsOriginAllowed(origin =>
               {
                   if (string.IsNullOrEmpty(origin)) return false;
-                  if (allowedOrigins.Contains(origin)) return true;
+                  var cleanOrigin = origin.TrimEnd('/');
+                  if (allowedOrigins.Contains(cleanOrigin)) return true;
                   try
                   {
                       var uri = new Uri(origin);
-                      return uri.Host == "localhost" || uri.Host == "127.0.0.1" || origin.EndsWith(".vercel.app") || origin.EndsWith(".rechanpage.my.id");
+                      return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || 
+                             uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase);
                   }
                   catch
                   {
@@ -200,24 +192,19 @@ builder.Services.AddCors(options =>
     });
 });
 
-
-// Controllers
 builder.Services.AddControllers();
 
-// Repositories
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IBidangRepository, BidangRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
-// Parsers
 builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParser, SIAP.Api.Services.Parsers.Implementations.PdfDocumentParser>();
 builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParser, SIAP.Api.Services.Parsers.Implementations.DocxDocumentParser>();
 builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParser, SIAP.Api.Services.Parsers.Implementations.TxtDocumentParser>();
 builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParserFactory, SIAP.Api.Services.Parsers.DocumentParserFactory>();
 
-// Chunking
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.ParagraphChunkStrategy>();
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.HeadingChunkStrategy>();
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.FixedLengthChunkStrategy>();
@@ -226,10 +213,8 @@ builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy,
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategyFactory, SIAP.Api.Services.Chunking.Implementations.ChunkStrategyFactory>();
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkService, SIAP.Api.Services.Chunking.Implementations.ChunkService>();
 
-// Memory Cache
 builder.Services.AddMemoryCache();
 
-// Services
 builder.Services.AddScoped<ILoginRateLimiter, LoginRateLimiter>();
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -245,7 +230,6 @@ builder.Services.AddSingleton<IDocumentProcessingQueue, DocumentProcessingQueue>
 builder.Services.AddHostedService<DocumentProcessingService>();
 builder.Services.AddHostedService<TokenCleanupBackgroundService>();
 
-// Rate Limiting Config
 builder.Services.AddRateLimiter(options =>
 {
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
@@ -254,10 +238,10 @@ builder.Services.AddRateLimiter(options =>
             factory: partition => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = 100, // 100 requests
+                PermitLimit = 100,
                 QueueLimit = 2,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                Window = TimeSpan.FromSeconds(10) // per 10 seconds
+                Window = TimeSpan.FromSeconds(10)
             }));
     
     options.OnRejected = async (context, token) =>
@@ -270,7 +254,6 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-// Static file serving for extracted document images
 var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "Images");
 if (!Directory.Exists(uploadsDir))
 {
@@ -283,29 +266,26 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads/images"
 });
 
-// Support reverse proxy headers (Nginx/Cloudflare/Docker/Vercel)
 app.UseForwardedHeaders(new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
 {
     ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
 });
 
-// Middleware global
 app.UseCors("AllowAll");
 
-// HTTPS Redirection & HSTS
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
 }
 app.UseHttpsRedirection();
 
-// Security Headers
+var cspOrigins = string.Join(" ", allowedOrigins);
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; connect-src 'self' wss: https://siap-fe.rechanpage.my.id https://sipenta-fe.vercel.app; img-src 'self' data: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:; frame-ancestors 'none';";
+    context.Response.Headers["Content-Security-Policy"] = $"default-src 'self'; connect-src 'self' wss: {cspOrigins}; img-src 'self' data: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:; frame-ancestors 'none';";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     await next();
 });
@@ -318,7 +298,6 @@ app.UseMiddleware<CsrfProtectionMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// Redirect root to Swagger UI for GET, return "tes" for HEAD
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapMethods("/", ["HEAD"], () => "tes");
 
