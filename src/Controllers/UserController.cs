@@ -298,6 +298,18 @@ public class UserController : ControllerBase
     {
         try
         {
+            var (userId, _, isSuperAdmin, isBidangAdmin) = await GetCurrentCallerInfoAsync();
+            if (!userId.HasValue) return Unauthorized(new { message = "Pengguna tidak terautentikasi" });
+
+            if (!isSuperAdmin && !isBidangAdmin)
+            {
+                var profile = await _userService.GetUserByIdAsync(userId.Value);
+                if (!profile.IsApproved)
+                {
+                    return StatusCode(403, new { message = "Akun Anda sedang menunggu persetujuan dari Admin/Kasubag." });
+                }
+            }
+
             var users = await _userService.SearchUsersAsync(query);
             return Ok(users);
         }

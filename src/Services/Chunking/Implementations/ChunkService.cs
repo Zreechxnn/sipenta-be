@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using SIAP.Api.Data;
 using SIAP.Api.Repositories.Interfaces;
 using SIAP.Api.Services.Chunking.Interfaces;
+using SIAP.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace SIAP.Api.Services.Chunking.Implementations;
@@ -12,17 +13,20 @@ public class ChunkService : IChunkService
     private readonly IChunkStrategyFactory _strategyFactory;
     private readonly AppDbContext _dbContext;
     private readonly IDocumentRepository _repository;
+    private readonly IEmbeddingService _embeddingService;
     private readonly ILogger<ChunkService> _logger;
 
     public ChunkService(
         IChunkStrategyFactory strategyFactory,
         AppDbContext dbContext,
         IDocumentRepository repository,
+        IEmbeddingService embeddingService,
         ILogger<ChunkService> logger)
     {
         _strategyFactory = strategyFactory;
         _dbContext = dbContext;
         _repository = repository;
+        _embeddingService = embeddingService;
         _logger = logger;
     }
 
@@ -77,6 +81,22 @@ public class ChunkService : IChunkService
                 throw new Exception("Jumlah chunk adalah 0 (nol). Document requires > 0 chunks.");
             }
 
+            // Generate vector embeddings for newly created chunks
+            foreach (var chunk in chunks)
+            {
+                if (!string.IsNullOrWhiteSpace(chunk.Content))
+                {
+                    try
+                    {
+                        chunk.Embedding = await _embeddingService.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to generate embedding for chunk {ChunkIndex} of document {DocumentId}", chunk.ChunkIndex, documentId);
+                    }
+                }
+            }
+
             await _dbContext.DocumentChunks.AddRangeAsync(chunks, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -94,8 +114,31 @@ public class ChunkService : IChunkService
         }
     }
 
-    public Task ProcessEmbeddingsAsync(CancellationToken cancellationToken = default)
+    public async Task ProcessEmbeddingsAsync(CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        var unindexedChunks = await _dbContext.DocumentChunks
+            .Where(c => c.Embedding == null)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        if (!unindexedChunks.Any()) return;
+
+        foreach (var chunk in unindexedChunks)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            if (!string.IsNullOrWhiteSpace(chunk.Content))
+            {
+                try
+                {
+                    chunk.Embedding = await _embeddingService.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to generate embedding for chunk {ChunkId}", chunk.Id);
+                }
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

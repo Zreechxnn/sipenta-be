@@ -224,8 +224,7 @@ PANDUAN:
             if (dbUser == null) return Unauthorized(ApiResponse<object>.Gagal("Pengguna tidak ditemukan."));
 
             var isSuperAdmin = dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase);
-            var isPrivileged = isSuperAdmin || dbUser.Role.Name.Equals("kasubag", StringComparison.OrdinalIgnoreCase);
-            if (!isPrivileged && !dbUser.IsApproved)
+            if (!isSuperAdmin && !dbUser.IsApproved)
             {
                 return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag dan penentuan bidang."));
             }
@@ -352,14 +351,11 @@ PANDUAN:
             if (historyImageFileIds.Any() && (isImageFollowUp || !relevantImages.Any()))
             {
                 var distinctHistoryIds = historyImageFileIds.Take(2).ToList();
-                var historyDocImages = await _dbContext.DocumentImages
-                    .Where(di => di.FilePath != null)
-                    .ToListAsync();
-                
                 var matchedHistoryImages = new List<DocumentImage>();
                 foreach (var hid in distinctHistoryIds)
                 {
-                    var found = historyDocImages.FirstOrDefault(di => di.FilePath != null && di.FilePath.Contains(hid));
+                    var found = await _dbContext.DocumentImages
+                        .FirstOrDefaultAsync(di => di.FilePath != null && di.FilePath.Contains(hid));
                     if (found != null && !matchedHistoryImages.Any(m => m.Id == found.Id))
                     {
                         matchedHistoryImages.Add(found);

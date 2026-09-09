@@ -231,8 +231,11 @@ public class DocumentsController : ControllerBase
             if (!Guid.TryParse(id, out var docId))
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "ID dokumen tidak valid." });
 
-            var (userId, _, _, isAdmin, _) = await GetCurrentUserAsync();
+            var (userId, _, _, isAdmin, isApproved) = await GetCurrentUserAsync();
             if (!userId.HasValue) return Unauthorized();
+
+            if (!isAdmin && !isApproved)
+                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
 
             var result = await _service.GetAccessesAsync(docId, userId.Value, isAdmin);
             return Ok(ApiResponse<List<DocumentAccessUserDto>>.Ok(result));
@@ -259,8 +262,11 @@ public class DocumentsController : ControllerBase
             if (!Guid.TryParse(id, out var docId))
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "ID dokumen tidak valid." });
 
-            var (userId, _, _, isAdmin, _) = await GetCurrentUserAsync();
+            var (userId, _, _, isAdmin, isApproved) = await GetCurrentUserAsync();
             if (!userId.HasValue) return Unauthorized();
+
+            if (!isAdmin && !isApproved)
+                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
 
             var result = await _service.ShareAsync(docId, request.Username, userId.Value, isAdmin);
 
@@ -290,8 +296,11 @@ public class DocumentsController : ControllerBase
             if (!Guid.TryParse(id, out var docId) || !Guid.TryParse(targetUserId, out var targetId))
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "ID tidak valid." });
 
-            var (userId, _, _, isAdmin, _) = await GetCurrentUserAsync();
+            var (userId, _, _, isAdmin, isApproved) = await GetCurrentUserAsync();
             if (!userId.HasValue) return Unauthorized();
+
+            if (!isAdmin && !isApproved)
+                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
 
             await _service.RevokeAccessAsync(docId, targetId, userId.Value, isAdmin);
 
@@ -675,7 +684,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("{id}/reprocess-images")]
-    [Authorize(Roles = "admin,user")]
+    [Authorize(Roles = "admin,kasubag,user")]
     public async Task<IActionResult> ReprocessImages(string id)
     {
         try
@@ -708,7 +717,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("search/vector")]
-    public async Task<IActionResult> SemanticSearch([FromBody] VectorSearchDto request)
+    public async Task<IActionResult> SemanticSearch([FromBody] VectorSearchDto request, [FromServices] IEmbeddingService embeddingService)
     {
         try
         {
@@ -716,7 +725,8 @@ public class DocumentsController : ControllerBase
             if (!isAdmin && !isApproved)
                 return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda belum disetujui."));
 
-            var results = await _repository.SearchKeywordAsync(request.Query, request.TopK, userId, userBidangId, isAdmin);
+            var embedding = await embeddingService.GenerateEmbeddingAsync(request.Query);
+            var results = await _repository.SearchHybridAsync(request.Query, embedding, request.TopK, userId, userBidangId, isAdmin);
 
             var response = results.Select(c => new
             {
@@ -729,7 +739,7 @@ public class DocumentsController : ControllerBase
                 c.Metadata
             });
 
-            return Ok(ApiResponse<object>.Ok(response, "Pencarian keyword berhasil. (Fallback dari Semantic)"));
+            return Ok(ApiResponse<object>.Ok(response, "Pencarian semantik berhasil."));
         }
         catch (Exception ex)
         {
@@ -738,7 +748,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("search/hybrid")]
-    public async Task<IActionResult> HybridSearch([FromBody] VectorSearchDto request)
+    public async Task<IActionResult> HybridSearch([FromBody] VectorSearchDto request, [FromServices] IEmbeddingService embeddingService)
     {
         try
         {
@@ -746,7 +756,8 @@ public class DocumentsController : ControllerBase
             if (!isAdmin && !isApproved)
                 return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda belum disetujui."));
 
-            var results = await _repository.SearchKeywordAsync(request.Query, request.TopK, userId, userBidangId, isAdmin);
+            var embedding = await embeddingService.GenerateEmbeddingAsync(request.Query);
+            var results = await _repository.SearchHybridAsync(request.Query, embedding, request.TopK, userId, userBidangId, isAdmin);
 
             var response = results.Select(x => new
             {
@@ -769,7 +780,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("ask")]
-    public async Task<IActionResult> Ask([FromBody] VectorSearchDto request, [FromServices] IGroqService groqService)
+    public async Task<IActionResult> Ask([FromBody] VectorSearchDto request, [FromServices] IGroqService groqService, [FromServices] IEmbeddingService embeddingService)
     {
         try
         {
@@ -777,7 +788,8 @@ public class DocumentsController : ControllerBase
             if (!isAdmin && !isApproved)
                 return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda belum disetujui."));
 
-            var results = await _repository.SearchKeywordAsync(request.Query, request.TopK, userId, userBidangId, isAdmin);
+            var embedding = await embeddingService.GenerateEmbeddingAsync(request.Query);
+            var results = await _repository.SearchHybridAsync(request.Query, embedding, request.TopK, userId, userBidangId, isAdmin);
 
             var contextBuilder = new System.Text.StringBuilder();
             foreach (var chunk in results)
@@ -828,13 +840,15 @@ PANDUAN:
                 return StatusCode(403, ApiResponse<string>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
 
             var docImage = await _dbContext.DocumentImages.FirstOrDefaultAsync(di => di.FilePath.Contains(fileId) || di.FileName.Contains(fileId));
-            if (docImage != null)
+            if (docImage == null)
             {
-                var hasAccess = await _repository.HasAccessAsync(docImage.DocumentId, userId.Value, userBidangId, isAdmin);
-                if (!hasAccess)
-                {
-                    return Forbid();
-                }
+                return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Gambar tidak ditemukan." });
+            }
+
+            var hasAccess = await _repository.HasAccessAsync(docImage.DocumentId, userId.Value, userBidangId, isAdmin);
+            if (!hasAccess)
+            {
+                return Forbid();
             }
 
             var stream = await driveService.DownloadFileAsync(fileId);
