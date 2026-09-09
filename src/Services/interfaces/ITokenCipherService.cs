@@ -7,6 +7,13 @@ namespace SIAP.Api.Services.Interfaces;
 public interface ITokenCipherService
 {
     /// <summary>
+    /// Menghasilkan one-way hash SHA-256 dari token refresh untuk penyimpanan aman di database (CWE-916).
+    /// </summary>
+    /// <param name="plainToken">Token mentah asli.</param>
+    /// <returns>String hash dengan prefiks HASH_.</returns>
+    string HashToken(string plainToken);
+
+    /// <summary>
     /// Enkripsi token mentah (plaintext) menggunakan algoritma AES-256 menjadi ciphertext yang aman disimpan di database.
     /// </summary>
     /// <param name="plainToken">Token mentah asli.</param>

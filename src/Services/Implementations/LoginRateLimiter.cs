@@ -7,6 +7,7 @@ public class LoginRateLimiter : ILoginRateLimiter
 {
     private readonly IMemoryCache _cache;
     private const int MaxFailedAttempts = 5;
+    private const int MaxIpFailedAttempts = 15;
     private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan AttemptWindow = TimeSpan.FromMinutes(15);
 
@@ -17,12 +18,12 @@ public class LoginRateLimiter : ILoginRateLimiter
 
     public Task<LockoutStatus> CheckLockoutAsync(string identifier, string ipAddress)
     {
-        var (attemptKey, lockoutKey) = GetKeys(identifier, ipAddress);
+        var (userAttemptKey, userLockoutKey, ipAttemptKey, ipLockoutKey) = GetKeys(identifier, ipAddress);
 
-        // Check if actively locked out
-        if (_cache.TryGetValue(lockoutKey, out DateTimeOffset lockoutExpiry))
+        // 1. Check if user is locked out
+        if (_cache.TryGetValue(userLockoutKey, out DateTimeOffset userLockExpiry))
         {
-            var remaining = (int)Math.Max(0, (lockoutExpiry - DateTimeOffset.UtcNow).TotalSeconds);
+            var remaining = (int)Math.Max(0, (userLockExpiry - DateTimeOffset.UtcNow).TotalSeconds);
             if (remaining > 0)
             {
                 return Task.FromResult(new LockoutStatus
@@ -33,17 +34,31 @@ public class LoginRateLimiter : ILoginRateLimiter
                     FailedAttempts = MaxFailedAttempts
                 });
             }
-            else
-            {
-                // Lockout expired
-                _cache.Remove(lockoutKey);
-                _cache.Remove(attemptKey);
-            }
+            _cache.Remove(userLockoutKey);
+            _cache.Remove(userAttemptKey);
         }
 
-        // Check current attempts count
+        // 2. Check if IP is locked out
+        if (!string.IsNullOrEmpty(ipAddress) && _cache.TryGetValue(ipLockoutKey, out DateTimeOffset ipLockExpiry))
+        {
+            var remaining = (int)Math.Max(0, (ipLockExpiry - DateTimeOffset.UtcNow).TotalSeconds);
+            if (remaining > 0)
+            {
+                return Task.FromResult(new LockoutStatus
+                {
+                    IsLockedOut = true,
+                    RemainingSeconds = remaining,
+                    RemainingAttempts = 0,
+                    FailedAttempts = MaxIpFailedAttempts
+                });
+            }
+            _cache.Remove(ipLockoutKey);
+            _cache.Remove(ipAttemptKey);
+        }
+
+        // Check current user attempts count
         int currentAttempts = 0;
-        if (_cache.TryGetValue(attemptKey, out int attempts))
+        if (_cache.TryGetValue(userAttemptKey, out int attempts))
         {
             currentAttempts = attempts;
         }
@@ -59,56 +74,87 @@ public class LoginRateLimiter : ILoginRateLimiter
 
     public Task<LockoutStatus> RecordFailedAttemptAsync(string identifier, string ipAddress)
     {
-        var (attemptKey, lockoutKey) = GetKeys(identifier, ipAddress);
+        var (userAttemptKey, userLockoutKey, ipAttemptKey, ipLockoutKey) = GetKeys(identifier, ipAddress);
 
-        int currentAttempts = 0;
-        if (_cache.TryGetValue(attemptKey, out int attempts))
+        // Record User Attempt
+        int userAttempts = 0;
+        if (_cache.TryGetValue(userAttemptKey, out int uAttempts))
         {
-            currentAttempts = attempts;
+            userAttempts = uAttempts;
         }
+        userAttempts++;
 
-        currentAttempts++;
+        // Record IP Attempt
+        int ipAttempts = 0;
+        if (_cache.TryGetValue(ipAttemptKey, out int iAttempts))
+        {
+            ipAttempts = iAttempts;
+        }
+        ipAttempts++;
 
-        if (currentAttempts >= MaxFailedAttempts)
+        bool isUserLocked = userAttempts >= MaxFailedAttempts;
+        bool isIpLocked = ipAttempts >= MaxIpFailedAttempts;
+
+        if (isUserLocked)
         {
             var lockoutExpiry = DateTimeOffset.UtcNow.Add(LockoutDuration);
-            _cache.Set(lockoutKey, lockoutExpiry, LockoutDuration);
-            _cache.Set(attemptKey, currentAttempts, LockoutDuration);
+            _cache.Set(userLockoutKey, lockoutExpiry, LockoutDuration);
+            _cache.Set(userAttemptKey, userAttempts, LockoutDuration);
+        }
+        else
+        {
+            _cache.Set(userAttemptKey, userAttempts, AttemptWindow);
+        }
 
+        if (isIpLocked)
+        {
+            var lockoutExpiry = DateTimeOffset.UtcNow.Add(LockoutDuration);
+            _cache.Set(ipLockoutKey, lockoutExpiry, LockoutDuration);
+            _cache.Set(ipAttemptKey, ipAttempts, LockoutDuration);
+        }
+        else
+        {
+            _cache.Set(ipAttemptKey, ipAttempts, AttemptWindow);
+        }
+
+        if (isUserLocked || isIpLocked)
+        {
             return Task.FromResult(new LockoutStatus
             {
                 IsLockedOut = true,
                 RemainingSeconds = (int)LockoutDuration.TotalSeconds,
                 RemainingAttempts = 0,
-                FailedAttempts = currentAttempts
+                FailedAttempts = userAttempts
             });
         }
-        else
-        {
-            _cache.Set(attemptKey, currentAttempts, AttemptWindow);
 
-            return Task.FromResult(new LockoutStatus
-            {
-                IsLockedOut = false,
-                RemainingSeconds = 0,
-                RemainingAttempts = MaxFailedAttempts - currentAttempts,
-                FailedAttempts = currentAttempts
-            });
-        }
+        return Task.FromResult(new LockoutStatus
+        {
+            IsLockedOut = false,
+            RemainingSeconds = 0,
+            RemainingAttempts = Math.Max(0, MaxFailedAttempts - userAttempts),
+            FailedAttempts = userAttempts
+        });
     }
 
     public Task ResetAttemptsAsync(string identifier, string ipAddress)
     {
-        var (attemptKey, lockoutKey) = GetKeys(identifier, ipAddress);
-        _cache.Remove(attemptKey);
-        _cache.Remove(lockoutKey);
+        var (userAttemptKey, userLockoutKey, ipAttemptKey, _) = GetKeys(identifier, ipAddress);
+        _cache.Remove(userAttemptKey);
+        _cache.Remove(userLockoutKey);
+        _cache.Remove(ipAttemptKey);
         return Task.CompletedTask;
     }
 
-    private static (string attemptKey, string lockoutKey) GetKeys(string identifier, string ipAddress)
+    private static (string userAttemptKey, string userLockoutKey, string ipAttemptKey, string ipLockoutKey) GetKeys(string identifier, string ipAddress)
     {
         var cleanId = (identifier ?? string.Empty).Trim().ToLowerInvariant();
         var cleanIp = (ipAddress ?? "unknown").Trim().ToLowerInvariant();
-        return ($"auth:attempts:{cleanId}:{cleanIp}", $"auth:lockout:{cleanId}:{cleanIp}");
+        return (
+            $"auth:attempts:user:{cleanId}",
+            $"auth:lockout:user:{cleanId}",
+            $"auth:attempts:ip:{cleanIp}",
+            $"auth:lockout:ip:{cleanIp}"
+        );
     }
 }

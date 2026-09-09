@@ -23,7 +23,7 @@ public interface IDocumentRepository
     Task DeleteAsync(Document document);
     Task ExecuteInTransactionAsync(Func<Task> action);
     Task<List<DocumentChunk>> GetChunksByDocumentIdAsync(Guid documentId);
-    Task<(List<DocumentChunk> Items, int TotalCount)> GetAllChunksAsync(int pageNumber, int pageSize, string? keyword);
+    Task<(List<DocumentChunk> Items, int TotalCount)> GetAllChunksAsync(int pageNumber, int pageSize, string? keyword, Guid? userId = null, int? userBidangId = null, bool isAdmin = false);
     Task<DocumentChunk?> GetChunkByIdAsync(Guid documentId, Guid chunkId);
     Task UpdateChunkAsync(DocumentChunk chunk);
     Task<List<DocumentChunk>> SearchKeywordAsync(string keyword, int topK, Guid? userId = null, int? userBidangId = null, bool isAdmin = false);

@@ -173,12 +173,19 @@ public class AuthService : IAuthService
             throw new Exception("Refresh token tidak valid.");
         }
 
-        // Cari token di database menggunakan versi terenkripsi (AES-256)
-        var cipherToken = _tokenCipherService.Encrypt(refreshTokenString);
-        var existingToken = await _refreshTokenRepository.GetByTokenAsync(cipherToken);
+        // 1. Cari token di database menggunakan versi One-Way Hash (SHA-256)
+        var hashedToken = _tokenCipherService.HashToken(refreshTokenString);
+        var existingToken = await _refreshTokenRepository.GetByTokenAsync(hashedToken);
 
-        // Fallback backward-compatibility: jika token di database dibuat sebelum migrasi cipher
-        if (existingToken == null && !refreshTokenString.StartsWith("ENC_"))
+        // Fallback 1: Jika masih tersimpan sebagai AES Cipher (ENC_...)
+        if (existingToken == null)
+        {
+            var cipherToken = _tokenCipherService.Encrypt(refreshTokenString);
+            existingToken = await _refreshTokenRepository.GetByTokenAsync(cipherToken);
+        }
+
+        // Fallback 2: Token mentah (sebelum migrasi cipher)
+        if (existingToken == null && !refreshTokenString.StartsWith("ENC_") && !refreshTokenString.StartsWith("HASH_"))
         {
             existingToken = await _refreshTokenRepository.GetByTokenAsync(refreshTokenString);
         }
@@ -202,7 +209,19 @@ public class AuthService : IAuthService
                     if (replacementUser != null)
                     {
                         var replacementJwt = GenerateJwtToken(replacementUser);
-                        var rawReplacementToken = _tokenCipherService.Decrypt(replacementToken.Token);
+                        string rawReplacementToken;
+                        if (replacementToken.Token.StartsWith("ENC_"))
+                        {
+                            rawReplacementToken = _tokenCipherService.Decrypt(replacementToken.Token);
+                        }
+                        else
+                        {
+                            // Untuk One-Way Hash, terbitkan pasangan token baru agar request concurrent tetap sukses
+                            var (concurrentRefresh, freshRaw) = CreateRefreshToken(replacementUser.Id, ipAddress);
+                            await _refreshTokenRepository.AddAsync(concurrentRefresh);
+                            rawReplacementToken = freshRaw;
+                        }
+
                         return new AuthResponse
                         {
                             Token = replacementJwt,
@@ -252,11 +271,14 @@ public class AuthService : IAuthService
     {
         if (!string.IsNullOrWhiteSpace(refreshTokenString))
         {
+            var hashedToken = _tokenCipherService.HashToken(refreshTokenString);
+            await _refreshTokenRepository.RevokeTokenAsync(hashedToken, ipAddress);
+
             var cipherToken = _tokenCipherService.Encrypt(refreshTokenString);
             await _refreshTokenRepository.RevokeTokenAsync(cipherToken, ipAddress);
 
             // Jika token mentah lama sebelum migrasi enkripsi
-            if (!refreshTokenString.StartsWith("ENC_"))
+            if (!refreshTokenString.StartsWith("ENC_") && !refreshTokenString.StartsWith("HASH_"))
             {
                 await _refreshTokenRepository.RevokeTokenAsync(refreshTokenString, ipAddress);
             }
@@ -278,15 +300,15 @@ public class AuthService : IAuthService
             .Replace("/", "_")
             .TrimEnd('=');
 
-        // Enkripsi token sebelum disimpan ke entity database
-        var cipherToken = _tokenCipherService.Encrypt(rawTokenString);
+        // Simpan one-way hash SHA-256 di database (CWE-916 & OAuth 2.0 BCP)
+        var tokenHash = _tokenCipherService.HashToken(rawTokenString);
         var days = _jwtOptions.RefreshTokenExpiryDays > 0 ? _jwtOptions.RefreshTokenExpiryDays : 1;
 
         var entity = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            Token = cipherToken,
+            Token = tokenHash,
             ExpiresAt = DateTime.UtcNow.AddDays(days),
             CreatedAt = DateTime.UtcNow,
             CreatedByIp = ipAddress

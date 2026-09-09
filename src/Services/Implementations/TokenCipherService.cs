@@ -30,6 +30,15 @@ public class TokenCipherService : ITokenCipherService
         _keyBytes = SHA256.HashData(Encoding.UTF8.GetBytes(secret));
     }
 
+    public string HashToken(string plainToken)
+    {
+        if (string.IsNullOrWhiteSpace(plainToken)) return string.Empty;
+        if (plainToken.StartsWith("HASH_")) return plainToken;
+
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(plainToken));
+        return "HASH_" + Convert.ToHexString(hashBytes).ToLowerInvariant();
+    }
+
     public string Encrypt(string plainToken)
     {
         if (string.IsNullOrWhiteSpace(plainToken)) return plainToken;

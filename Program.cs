@@ -101,7 +101,7 @@ builder.Services.AddAuthentication(options =>
             if (!string.IsNullOrEmpty(accessToken) && 
                 accessToken != "hidden-httponly-token" && 
                 accessToken != "session-active" && 
-                (path.StartsWithSegments("/hubs") || path.StartsWithSegments("/chatHub")))
+                (path.StartsWithSegments("/hubs") || path.StartsWithSegments("/chatHub") || path.Value?.Contains("/images/") == true))
             {
                 context.Token = accessToken;
             }

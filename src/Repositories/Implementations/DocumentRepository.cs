@@ -202,12 +202,33 @@ public class DocumentRepository : IDocumentRepository
             .ToListAsync();
     }
 
-    public async Task<(List<DocumentChunk> Items, int TotalCount)> GetAllChunksAsync(int pageNumber, int pageSize, string? keyword)
+    public async Task<(List<DocumentChunk> Items, int TotalCount)> GetAllChunksAsync(
+        int pageNumber, 
+        int pageSize, 
+        string? keyword,
+        Guid? userId = null,
+        int? userBidangId = null,
+        bool isAdmin = false)
     {
         var query = _context.DocumentChunks
             .Include(c => c.Document)
                 .ThenInclude(d => d!.Bidang)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.User)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.Accesses)
             .AsQueryable();
+
+        if (!isAdmin && userId.HasValue)
+        {
+            var uId = userId.Value;
+            query = query.Where(c => 
+                c.Document != null && (
+                    c.Document.UserId == uId || 
+                    (userBidangId.HasValue && (c.Document.BidangId == userBidangId.Value || (c.Document.BidangId == null && c.Document.User != null && c.Document.User.BidangId == userBidangId.Value))) || 
+                    c.Document.Accesses.Any(a => a.UserId == uId)
+                ));
+        }
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
