@@ -101,7 +101,7 @@ builder.Services.AddAuthentication(options =>
             if (!string.IsNullOrEmpty(accessToken) && 
                 accessToken != "hidden-httponly-token" && 
                 accessToken != "session-active" && 
-                (path.StartsWithSegments("/hubs") || path.StartsWithSegments("/chatHub")))
+                (path.StartsWithSegments("/hubs") || path.StartsWithSegments("/chatHub") || path.Value?.Contains("/images/") == true))
             {
                 context.Token = accessToken;
             }
@@ -217,6 +217,7 @@ builder.Services.AddMemoryCache();
 
 builder.Services.AddScoped<ILoginRateLimiter, LoginRateLimiter>();
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
+builder.Services.AddSingleton<ITokenCipherService, TokenCipherService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IUserService, UserService>();

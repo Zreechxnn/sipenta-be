@@ -470,6 +470,19 @@ public class DocumentsController : ControllerBase
             {
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Dokumen tidak ditemukan." });
             }
+
+            var (userId, userBidangId, userBidang, isAdmin, isApproved) = await GetCurrentUserAsync();
+            if (!userId.HasValue) return Unauthorized();
+
+            if (!isAdmin && !isApproved)
+                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+
+            var hasAccess = await _repository.HasAccessAsync(guidId, userId.Value, userBidangId, isAdmin);
+            if (!hasAccess)
+            {
+                return Forbid();
+            }
+
             var result = await _service.GetChunksAsync(guidId);
             return Ok(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Ok(result));
         }
@@ -535,7 +548,13 @@ public class DocumentsController : ControllerBase
     {
         try
         {
-            var (items, totalCount) = await _repository.GetAllChunksAsync(pageNumber, pageSize, keyword);
+            var (userId, userBidangId, _, isAdmin, isApproved) = await GetCurrentUserAsync();
+            if (!userId.HasValue) return Unauthorized();
+
+            if (!isAdmin && !isApproved)
+                return StatusCode(403, ApiResponse<PagedResponse<SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+
+            var (items, totalCount) = await _repository.GetAllChunksAsync(pageNumber, pageSize, keyword, userId, userBidangId, isAdmin);
             var response = items.Select(c => new SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto
             {
                 Id = c.Id,
@@ -583,6 +602,19 @@ public class DocumentsController : ControllerBase
             {
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "ID Dokumen atau Chunk tidak valid." });
             }
+
+            var (userId, userBidangId, _, isAdmin, isApproved) = await GetCurrentUserAsync();
+            if (!userId.HasValue) return Unauthorized();
+
+            if (!isAdmin && !isApproved)
+                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+
+            var hasAccess = await _repository.HasAccessAsync(docId, userId.Value, userBidangId, isAdmin);
+            if (!hasAccess)
+            {
+                return Forbid();
+            }
+
             var result = await _service.GetChunkByIdAsync(docId, chId);
             return Ok(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Ok(result));
         }
@@ -785,11 +817,26 @@ PANDUAN:
     }
 
     [HttpGet("images/{fileId}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetImage(string fileId, [FromServices] IGoogleDriveService driveService)
     {
         try
         {
+            var (userId, userBidangId, _, isAdmin, isApproved) = await GetCurrentUserAsync();
+            if (!userId.HasValue) return Unauthorized();
+
+            if (!isAdmin && !isApproved)
+                return StatusCode(403, ApiResponse<string>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+
+            var docImage = await _dbContext.DocumentImages.FirstOrDefaultAsync(di => di.FilePath.Contains(fileId) || di.FileName.Contains(fileId));
+            if (docImage != null)
+            {
+                var hasAccess = await _repository.HasAccessAsync(docImage.DocumentId, userId.Value, userBidangId, isAdmin);
+                if (!hasAccess)
+                {
+                    return Forbid();
+                }
+            }
+
             var stream = await driveService.DownloadFileAsync(fileId);
             return File(stream, "image/jpeg");
         }

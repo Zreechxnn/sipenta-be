@@ -10,12 +10,18 @@ public class UserService : IUserService
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
     private readonly IBidangRepository _bidangRepository;
+    private readonly IRefreshTokenRepository _refreshTokenRepository;
 
-    public UserService(IUserRepository userRepository, IRoleRepository roleRepository, IBidangRepository bidangRepository)
+    public UserService(
+        IUserRepository userRepository,
+        IRoleRepository roleRepository,
+        IBidangRepository bidangRepository,
+        IRefreshTokenRepository refreshTokenRepository)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _bidangRepository = bidangRepository;
+        _refreshTokenRepository = refreshTokenRepository;
     }
 
     public async Task<IEnumerable<UserDto>> GetAllUsersAsync()
@@ -102,6 +108,7 @@ public class UserService : IUserService
         if (!string.IsNullOrEmpty(request.Password))
         {
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+            await _refreshTokenRepository.RevokeAllUserTokensAsync(user.Id);
         }
 
         if (request.RoleId.HasValue && request.RoleId.Value != user.RoleId)
@@ -226,6 +233,7 @@ public class UserService : IUserService
                 throw new Exception("Password saat ini tidak valid.");
             }
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            await _refreshTokenRepository.RevokeAllUserTokensAsync(user.Id);
         }
 
         user.UpdatedAt = DateTime.UtcNow;

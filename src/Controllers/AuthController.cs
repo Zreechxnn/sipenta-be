@@ -64,7 +64,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = null, // Disimpan eksklusif via HttpOnly Cookie (CWE-312)
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -111,7 +111,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = null, // Disimpan eksklusif via HttpOnly Cookie (CWE-312)
                 User = response.User,
                 IsNewUser = true,
                 ExpiresAt = expiry
@@ -142,7 +142,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = null, // Disimpan eksklusif via HttpOnly Cookie (CWE-312)
                 User = response.User,
                 IsNewUser = response.IsNewUser,
                 ExpiresAt = expiry
@@ -181,7 +181,7 @@ public class AuthController : ControllerBase
             return Ok(new AuthResponse
             {
                 Token = response.Token,
-                RefreshToken = null,
+                RefreshToken = null, // Disimpan eksklusif via HttpOnly Cookie (CWE-312)
                 User = response.User,
                 IsNewUser = false,
                 ExpiresAt = expiry
@@ -317,12 +317,6 @@ public class AuthController : ControllerBase
 
     private string GetClientIp()
     {
-        if (Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor) && !string.IsNullOrEmpty(forwardedFor))
-        {
-            var ips = forwardedFor.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries);
-            if (ips.Length > 0) return ips[0].Trim();
-        }
-
         return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 }

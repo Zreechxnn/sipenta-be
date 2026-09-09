@@ -18,6 +18,7 @@ public class AuthService : IAuthService
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
+    private readonly ITokenCipherService _tokenCipherService;
     private readonly JwtOptions _jwtOptions;
     private readonly GoogleOptions _googleOptions;
 
@@ -25,12 +26,14 @@ public class AuthService : IAuthService
         IUserRepository userRepository, 
         IRoleRepository roleRepository, 
         IRefreshTokenRepository refreshTokenRepository,
+        ITokenCipherService tokenCipherService,
         IOptions<JwtOptions> jwtOptions, 
         IOptions<GoogleOptions> googleOptions)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _refreshTokenRepository = refreshTokenRepository;
+        _tokenCipherService = tokenCipherService;
         _jwtOptions = jwtOptions.Value;
         _googleOptions = googleOptions.Value;
     }
@@ -47,13 +50,13 @@ public class AuthService : IAuthService
         await _refreshTokenRepository.RevokeAllUserTokensAsync(user.Id, ipAddress);
 
         var token = GenerateJwtToken(user);
-        var refreshToken = CreateRefreshToken(user.Id, ipAddress);
+        var (refreshToken, rawRefreshToken) = CreateRefreshToken(user.Id, ipAddress);
         await _refreshTokenRepository.AddAsync(refreshToken);
 
         return new AuthResponse
         {
             Token = token,
-            RefreshToken = refreshToken.Token,
+            RefreshToken = rawRefreshToken,
             User = MapToUserDto(user)
         };
     }
@@ -91,13 +94,13 @@ public class AuthService : IAuthService
         user = await _userRepository.GetByIdAsync(user.Id);
 
         var token = GenerateJwtToken(user!);
-        var refreshToken = CreateRefreshToken(user!.Id, ipAddress);
+        var (refreshToken, rawRefreshToken) = CreateRefreshToken(user!.Id, ipAddress);
         await _refreshTokenRepository.AddAsync(refreshToken);
 
         return new AuthResponse
         {
             Token = token,
-            RefreshToken = refreshToken.Token,
+            RefreshToken = rawRefreshToken,
             User = MapToUserDto(user),
             IsNewUser = true
         };
@@ -151,13 +154,13 @@ public class AuthService : IAuthService
         await _refreshTokenRepository.RevokeAllUserTokensAsync(user!.Id, ipAddress);
 
         var token = GenerateJwtToken(user!);
-        var refreshToken = CreateRefreshToken(user!.Id, ipAddress);
+        var (refreshToken, rawRefreshToken) = CreateRefreshToken(user!.Id, ipAddress);
         await _refreshTokenRepository.AddAsync(refreshToken);
 
         return new AuthResponse
         {
             Token = token,
-            RefreshToken = refreshToken.Token,
+            RefreshToken = rawRefreshToken,
             User = MapToUserDto(user),
             IsNewUser = isNewUser
         };
@@ -170,7 +173,23 @@ public class AuthService : IAuthService
             throw new Exception("Refresh token tidak valid.");
         }
 
-        var existingToken = await _refreshTokenRepository.GetByTokenAsync(refreshTokenString);
+        // 1. Cari token di database menggunakan versi One-Way Hash (SHA-256)
+        var hashedToken = _tokenCipherService.HashToken(refreshTokenString);
+        var existingToken = await _refreshTokenRepository.GetByTokenAsync(hashedToken);
+
+        // Fallback 1: Jika masih tersimpan sebagai AES Cipher (ENC_...)
+        if (existingToken == null)
+        {
+            var cipherToken = _tokenCipherService.Encrypt(refreshTokenString);
+            existingToken = await _refreshTokenRepository.GetByTokenAsync(cipherToken);
+        }
+
+        // Fallback 2: Token mentah (sebelum migrasi cipher)
+        if (existingToken == null && !refreshTokenString.StartsWith("ENC_") && !refreshTokenString.StartsWith("HASH_"))
+        {
+            existingToken = await _refreshTokenRepository.GetByTokenAsync(refreshTokenString);
+        }
+
         if (existingToken == null)
         {
             throw new Exception("Refresh token tidak ditemukan.");
@@ -190,10 +209,23 @@ public class AuthService : IAuthService
                     if (replacementUser != null)
                     {
                         var replacementJwt = GenerateJwtToken(replacementUser);
+                        string rawReplacementToken;
+                        if (replacementToken.Token.StartsWith("ENC_"))
+                        {
+                            rawReplacementToken = _tokenCipherService.Decrypt(replacementToken.Token);
+                        }
+                        else
+                        {
+                            // Untuk One-Way Hash, terbitkan pasangan token baru agar request concurrent tetap sukses
+                            var (concurrentRefresh, freshRaw) = CreateRefreshToken(replacementUser.Id, ipAddress);
+                            await _refreshTokenRepository.AddAsync(concurrentRefresh);
+                            rawReplacementToken = freshRaw;
+                        }
+
                         return new AuthResponse
                         {
                             Token = replacementJwt,
-                            RefreshToken = replacementToken.Token,
+                            RefreshToken = rawReplacementToken,
                             User = MapToUserDto(replacementUser)
                         };
                     }
@@ -215,11 +247,11 @@ public class AuthService : IAuthService
             throw new Exception("Pengguna tidak ditemukan.");
         }
 
-        // Rotate refresh token: generate new 30-min JWT and new 7-day refresh token
+        // Rotate refresh token: generate new 30-min JWT and new 1-day/7-day refresh token
         var newJwt = GenerateJwtToken(user);
-        var newRefreshToken = CreateRefreshToken(user.Id, ipAddress);
+        var (newRefreshToken, newRawToken) = CreateRefreshToken(user.Id, ipAddress);
 
-        // Mark old token revoked and link to replacement
+        // Mark old token revoked and link to replacement (stores cipher token in DB)
         existingToken.RevokedAt = DateTime.UtcNow;
         existingToken.RevokedByIp = ipAddress;
         existingToken.ReplacedByToken = newRefreshToken.Token;
@@ -230,7 +262,7 @@ public class AuthService : IAuthService
         return new AuthResponse
         {
             Token = newJwt,
-            RefreshToken = newRefreshToken.Token,
+            RefreshToken = newRawToken,
             User = MapToUserDto(user)
         };
     }
@@ -239,7 +271,17 @@ public class AuthService : IAuthService
     {
         if (!string.IsNullOrWhiteSpace(refreshTokenString))
         {
-            await _refreshTokenRepository.RevokeTokenAsync(refreshTokenString, ipAddress);
+            var hashedToken = _tokenCipherService.HashToken(refreshTokenString);
+            await _refreshTokenRepository.RevokeTokenAsync(hashedToken, ipAddress);
+
+            var cipherToken = _tokenCipherService.Encrypt(refreshTokenString);
+            await _refreshTokenRepository.RevokeTokenAsync(cipherToken, ipAddress);
+
+            // Jika token mentah lama sebelum migrasi enkripsi
+            if (!refreshTokenString.StartsWith("ENC_") && !refreshTokenString.StartsWith("HASH_"))
+            {
+                await _refreshTokenRepository.RevokeTokenAsync(refreshTokenString, ipAddress);
+            }
         }
     }
 
@@ -248,27 +290,31 @@ public class AuthService : IAuthService
         await _refreshTokenRepository.RevokeAllUserTokensAsync(userId, ipAddress);
     }
 
-    private RefreshToken CreateRefreshToken(Guid userId, string? ipAddress)
+    private (RefreshToken entity, string rawToken) CreateRefreshToken(Guid userId, string? ipAddress)
     {
         var randomBytes = new byte[64];
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(randomBytes);
-        var tokenString = Convert.ToBase64String(randomBytes)
+        var rawTokenString = Convert.ToBase64String(randomBytes)
             .Replace("+", "-")
             .Replace("/", "_")
             .TrimEnd('=');
 
+        // Simpan one-way hash SHA-256 di database (CWE-916 & OAuth 2.0 BCP)
+        var tokenHash = _tokenCipherService.HashToken(rawTokenString);
         var days = _jwtOptions.RefreshTokenExpiryDays > 0 ? _jwtOptions.RefreshTokenExpiryDays : 1;
 
-        return new RefreshToken
+        var entity = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            Token = tokenString,
+            Token = tokenHash,
             ExpiresAt = DateTime.UtcNow.AddDays(days),
             CreatedAt = DateTime.UtcNow,
             CreatedByIp = ipAddress
         };
+
+        return (entity, rawTokenString);
     }
 
     private static UserDto MapToUserDto(User user)
