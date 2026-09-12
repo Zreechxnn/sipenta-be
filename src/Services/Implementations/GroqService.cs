@@ -165,7 +165,7 @@ public class GroqService : IGroqService
                     model = selectedModel,
                     messages = messages,
                     temperature = 0.3,
-                    max_completion_tokens = isVision ? 800 : 2048
+                    max_completion_tokens = 2048
                 };
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, config.BaseUrl);
@@ -199,12 +199,7 @@ public class GroqService : IGroqService
                     .GetProperty("content")
                     .GetString();
 
-                if (!string.IsNullOrEmpty(answer))
-                {
-                    answer = System.Text.RegularExpressions.Regex.Replace(answer, @"<think>[\s\S]*?</think>", "").Trim();
-                }
-
-                return answer ?? string.Empty;
+                return CleanLlmResponse(answer);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -220,6 +215,58 @@ public class GroqService : IGroqService
         }
 
         return $"Terjadi kesalahan saat memproses jawaban AI dari semua endpoint: {string.Join(" | ", errors)}";
+    }
+
+    private string CleanLlmResponse(string? answer)
+    {
+        if (string.IsNullOrWhiteSpace(answer)) return string.Empty;
+
+        // 1. Remove closed <think>...</think> tags
+        answer = System.Text.RegularExpressions.Regex.Replace(answer, @"<think>[\s\S]*?</think>", "").Trim();
+
+        // 2. If <think> tag is still present (unclosed or truncated before </think>)
+        if (answer.Contains("<think>"))
+        {
+            // Try to extract the drafted final answer inside the thinking block if available
+            var finalSection = System.Text.RegularExpressions.Regex.Match(
+                answer, 
+                @"(?:(?:\*{1,2}(?:Final Polish|Final Response|Jawaban Akhir|Jawaban|Direct Answer)\*{1,2}|Headline:)\s*)[^:\n]*:?\s*([\s\S]+)$", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            );
+
+            if (finalSection.Success && finalSection.Groups[1].Value.Trim().Length > 20)
+            {
+                answer = finalSection.Groups[1].Value.Trim();
+            }
+            else
+            {
+                // Fallback: strip <think> tag and introductory thinking lines
+                answer = System.Text.RegularExpressions.Regex.Replace(
+                    answer, 
+                    @"^<think>[\s\S]*?(?:Here's a thinking process.*?\n\n|Analyze the User.*?\n\n)?", 
+                    "", 
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                ).Trim();
+            }
+        }
+
+        // 3. If model outputted an internal step-by-step monologue without <think> tags:
+        // (e.g. starting with "1. **Analyze the User's Request:** ... 6. **Final Polish**:")
+        if (System.Text.RegularExpressions.Regex.IsMatch(answer, @"^\s*1\.\s+\*\*Analyze", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            var finalSection = System.Text.RegularExpressions.Regex.Match(
+                answer, 
+                @"(?:(?:\*{1,2}(?:Final Polish|Final Response|Jawaban Akhir|Jawaban|Direct Answer)\*{1,2}|Headline:)\s*)[^:\n]*:?\s*([\s\S]+)$", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            );
+
+            if (finalSection.Success && finalSection.Groups[1].Value.Trim().Length > 20)
+            {
+                answer = finalSection.Groups[1].Value.Trim();
+            }
+        }
+
+        return answer.Trim();
     }
 }
 
