@@ -27,7 +27,7 @@ public class GroqService : IGroqService
     {
         var defaultBaseUrl = "https://api.groq.com/openai/v1/chat/completions";
         var defaultModel = "openai/gpt-oss-120b";
-        var defaultImageModel = "llama-3.2-11b-vision-preview";
+        var defaultImageModel = "qwen/qwen3.8-27b";
 
         var primaryKey = configuration["Llm:ApiKey"] ?? string.Empty;
         var primaryUrl = configuration["Llm:BaseUrl"] ?? defaultBaseUrl;
@@ -89,10 +89,17 @@ public class GroqService : IGroqService
                 new { type = "text", text = userMessage }
             };
 
-            foreach (var img in imageList)
+            for (int i = 0; i < imageList.Count; i++)
             {
+                var img = imageList[i];
                 var base64 = Convert.ToBase64String(img.Bytes);
                 var mime = string.IsNullOrWhiteSpace(img.MimeType) ? "image/jpeg" : img.MimeType;
+                var captionText = !string.IsNullOrWhiteSpace(img.Caption) ? $" - {img.Caption}" : "";
+                contentParts.Add(new
+                {
+                    type = "text",
+                    text = $"[GAMBAR #{i + 1}{captionText}]:"
+                });
                 contentParts.Add(new
                 {
                     type = "image_url",
@@ -158,7 +165,7 @@ public class GroqService : IGroqService
                     model = selectedModel,
                     messages = messages,
                     temperature = 0.3,
-                    max_completion_tokens = 4096
+                    max_completion_tokens = isVision ? 800 : 2048
                 };
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, config.BaseUrl);

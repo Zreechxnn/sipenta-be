@@ -402,7 +402,36 @@ public class DocumentRepository : IDocumentRepository
 
         // 3. Exact date / keyword substring boost search
         var exactMatches = new List<DocumentChunk>();
-        foreach (var word in words.Where(w => w.Length >= 2))
+        
+        // Detect date combination (e.g. Day number + Month name like "17" and "mei")
+        var indonesianMonths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"
+        };
+
+        var queryMonths = words.Where(w => indonesianMonths.Contains(w)).ToList();
+        var queryNumbers = words.Where(w => w.All(char.IsDigit) && w.Length <= 2).ToList();
+
+        if (queryNumbers.Any() && queryMonths.Any())
+        {
+            foreach (var num in queryNumbers)
+            {
+                foreach (var mon in queryMonths)
+                {
+                    var datePat1 = $"%{num} {mon}%";
+                    var datePat2 = $"%{num}  {mon}%";
+                    var dateMatch = await query
+                        .Where(c => EF.Functions.ILike(c.Content, datePat1) || 
+                                    EF.Functions.ILike(c.Content, datePat2))
+                        .Take(topK)
+                        .ToListAsync();
+                    exactMatches.AddRange(dateMatch);
+                }
+            }
+        }
+
+        // Only search non-numeric keywords (or numbers with length >= 4 like years) for exact substring matches
+        foreach (var word in words.Where(w => (w.Length >= 3 && !w.All(char.IsDigit)) || (w.All(char.IsDigit) && w.Length == 4)))
         {
             var pattern = $"%{word}%";
             var match = await query

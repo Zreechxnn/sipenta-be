@@ -851,8 +851,40 @@ PANDUAN:
                 return Forbid();
             }
 
-            var stream = await driveService.DownloadFileAsync(fileId);
-            return File(stream, "image/jpeg");
+            var mimeType = !string.IsNullOrEmpty(docImage.MimeType) ? docImage.MimeType : "image/jpeg";
+            var cacheDir = Path.Combine(Path.GetTempPath(), "siap_image_cache");
+            try
+            {
+                Directory.CreateDirectory(cacheDir);
+                var safeFileId = string.Join("_", fileId.Split(Path.GetInvalidFileNameChars()));
+                var cacheFilePath = Path.Combine(cacheDir, $"{safeFileId}.bin");
+
+                if (System.IO.File.Exists(cacheFilePath))
+                {
+                    var cachedBytes = await System.IO.File.ReadAllBytesAsync(cacheFilePath);
+                    Response.Headers["Cache-Control"] = "private, max-age=86400";
+                    return File(cachedBytes, mimeType);
+                }
+
+                using var stream = await driveService.DownloadFileAsync(fileId);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var bytes = ms.ToArray();
+
+                try
+                {
+                    await System.IO.File.WriteAllBytesAsync(cacheFilePath, bytes);
+                }
+                catch { }
+
+                Response.Headers["Cache-Control"] = "private, max-age=86400";
+                return File(bytes, mimeType);
+            }
+            catch
+            {
+                var stream = await driveService.DownloadFileAsync(fileId);
+                return File(stream, mimeType);
+            }
         }
         catch (Exception)
         {
