@@ -247,7 +247,11 @@ public class DocumentProcessingService : BackgroundService
 
                 document = await repository.GetByIdAsync(documentId) ?? document;
 
-                if (string.IsNullOrWhiteSpace(document.NamaTenagaAhli)) document.NamaTenagaAhli = "-";
+                if (string.IsNullOrWhiteSpace(document.NamaTenagaAhli)) 
+                    document.NamaTenagaAhli = "-";
+                else if (document.NamaTenagaAhli != "-")
+                    document.NamaTenagaAhli = document.NamaTenagaAhli.Trim().ToUpperInvariant();
+
                 if (string.IsNullOrWhiteSpace(document.JenisDokumen)) document.JenisDokumen = "Laporan Kerja";
                 document.Status = DocumentStatus.Parsed;
                 document.ProcessingFinishedAt = DateTime.UtcNow;
@@ -341,7 +345,7 @@ Berikut adalah teks awal dari dokumen laporan (maksimal 3000 karakter):
 
 Tolong ekstrak informasi berikut dan kembalikan HANYA dalam format JSON baku (tanpa markdown, tanpa blok kode ```, langsung objek JSON):
 {{
-  ""namaTenagaAhli"": ""..."", // Nama lengkap tenaga ahli
+  ""namaTenagaAhli"": ""..."", // Nama lengkap tenaga ahli (HARUS DALAM HURUF BESAR/UPPERCASE, contoh: FIRMAN MUHAMAD SAHIDIN)
   ""jenisDokumen"": ""..."", // Contoh: Laporan Bulanan, Laporan Mingguan, Laporan Akhir, dll.
   ""periodeLaporan"": ""..."", // Periode yang tercakup, contoh: Januari 2026
   ""judulLaporan"": ""..."" // Buat judul laporan yang ringkas, contoh: Laporan Bulanan Januari 2026
@@ -381,9 +385,14 @@ Jika ada data yang tidak ditemukan, beri string kosong """".
                 var judul = root.TryGetProperty("judulLaporan", out var judulProp) ? judulProp.GetString() : null;
 
                 bool modified = false;
-                if (!string.IsNullOrWhiteSpace(nama) && string.IsNullOrWhiteSpace(document.NamaTenagaAhli))
+                if (!string.IsNullOrWhiteSpace(nama))
                 {
-                    document.NamaTenagaAhli = nama.Trim();
+                    document.NamaTenagaAhli = nama.Trim().ToUpperInvariant();
+                    modified = true;
+                }
+                else if (!string.IsNullOrWhiteSpace(document.NamaTenagaAhli) && document.NamaTenagaAhli != "-")
+                {
+                    document.NamaTenagaAhli = document.NamaTenagaAhli.Trim().ToUpperInvariant();
                     modified = true;
                 }
                 if (!string.IsNullOrWhiteSpace(jenis) && string.IsNullOrWhiteSpace(document.JenisDokumen))

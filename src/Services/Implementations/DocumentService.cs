@@ -105,7 +105,7 @@ public class DocumentService : IDocumentService
                     Nama = string.IsNullOrWhiteSpace(request.Nama) ? originalFileName : request.Nama,
                     UserId = request.UserId,
                     BidangId = resolvedBidangId,
-                    NamaTenagaAhli = request.NamaTenagaAhli,
+                    NamaTenagaAhli = string.IsNullOrWhiteSpace(request.NamaTenagaAhli) ? null : request.NamaTenagaAhli.Trim().ToUpperInvariant(),
                     JenisDokumen = !string.IsNullOrWhiteSpace(request.JenisDokumen) ? request.JenisDokumen : DetectJenisDokumen(originalFileName),
                     PeriodeLaporan = request.PeriodeLaporan,
                     Path = driveFileId,
@@ -161,7 +161,7 @@ public class DocumentService : IDocumentService
             throw new KeyNotFoundException("Dokumen tidak ditemukan.");
 
         if (request.Nama != null) document.Nama = request.Nama;
-        if (request.NamaTenagaAhli != null) document.NamaTenagaAhli = request.NamaTenagaAhli;
+        if (request.NamaTenagaAhli != null) document.NamaTenagaAhli = string.IsNullOrWhiteSpace(request.NamaTenagaAhli) ? "-" : request.NamaTenagaAhli.Trim().ToUpperInvariant();
         if (request.JenisDokumen != null) document.JenisDokumen = request.JenisDokumen;
         if (request.PeriodeLaporan != null) document.PeriodeLaporan = request.PeriodeLaporan;
 
