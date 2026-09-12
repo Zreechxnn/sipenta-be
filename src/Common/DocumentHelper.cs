@@ -30,7 +30,11 @@ public static class DocumentHelper
         {
             if (string.IsNullOrWhiteSpace(document.NamaTenagaAhli))
             {
-                document.NamaTenagaAhli = match.Groups[1].Value.Trim();
+                document.NamaTenagaAhli = match.Groups[1].Value.Trim().ToUpperInvariant();
+            }
+            else
+            {
+                document.NamaTenagaAhli = document.NamaTenagaAhli.Trim().ToUpperInvariant();
             }
             
             if (string.IsNullOrWhiteSpace(document.PeriodeLaporan))

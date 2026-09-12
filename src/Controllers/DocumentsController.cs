@@ -21,19 +21,22 @@ public class DocumentsController : ControllerBase
     private readonly IUserRepository _userRepository;
     private readonly IHubContext<AppHub> _hubContext;
     private readonly SIAP.Api.Data.AppDbContext _dbContext;
+    private readonly ILogger<DocumentsController> _logger;
 
     public DocumentsController(
         IDocumentService service,
         IDocumentRepository repository,
         IUserRepository userRepository,
         IHubContext<AppHub> hubContext,
-        SIAP.Api.Data.AppDbContext dbContext)
+        SIAP.Api.Data.AppDbContext dbContext,
+        ILogger<DocumentsController> logger)
     {
         _service = service;
         _repository = repository;
         _userRepository = userRepository;
         _hubContext = hubContext;
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     private async Task<(Guid? userId, int? userBidangId, string? userBidang, bool isAdmin, bool isApproved)> GetCurrentUserAsync()
@@ -83,15 +86,18 @@ public class DocumentsController : ControllerBase
             {
                 if (!request.BidangId.HasValue && !string.IsNullOrWhiteSpace(request.Bidang))
                 {
-                    var b = await _dbContext.Bidangs.FirstOrDefaultAsync(x =>
-                        Microsoft.EntityFrameworkCore.EF.Functions.ILike(x.Nama, request.Bidang) ||
-                        (x.Kode != null && Microsoft.EntityFrameworkCore.EF.Functions.ILike(x.Kode, request.Bidang)) ||
-                        Microsoft.EntityFrameworkCore.EF.Functions.ILike(x.Nama, $"%{request.Bidang}%") ||
-                        (x.Kode != null && Microsoft.EntityFrameworkCore.EF.Functions.ILike(request.Bidang, $"%{x.Kode}%"))
+                    var allBidangs = await _dbContext.Bidangs.ToListAsync();
+                    var b = allBidangs.FirstOrDefault(x =>
+                        string.Equals(x.Nama, request.Bidang, StringComparison.OrdinalIgnoreCase) ||
+                        (x.Kode != null && string.Equals(x.Kode, request.Bidang, StringComparison.OrdinalIgnoreCase)) ||
+                        x.Nama.Contains(request.Bidang, StringComparison.OrdinalIgnoreCase) ||
+                        request.Bidang.Contains(x.Nama, StringComparison.OrdinalIgnoreCase) ||
+                        (x.Kode != null && request.Bidang.Contains(x.Kode, StringComparison.OrdinalIgnoreCase))
                     );
                     if (b != null)
                     {
                         request.BidangId = b.Id;
+                        request.Bidang = b.Nama;
                     }
                 }
 
@@ -110,7 +116,8 @@ public class DocumentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(ApiResponse<DocumentResponseDto>.Gagal(ex.Message));
+            _logger.LogError(ex, "Gagal mengupload dokumen: {Message}", ex.Message);
+            return BadRequest(ApiResponse<List<DocumentResponseDto>>.Gagal(ex.Message));
         }
     }
 
