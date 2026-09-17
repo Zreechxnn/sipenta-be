@@ -25,13 +25,17 @@ public class ConfigCipherService : IConfigCipherService
         _logger = logger;
 
         var secret = config["CONFIG_MASTER_KEY"] 
-                     ?? jwtOptions.Value.TokenCipherKey 
-                     ?? jwtOptions.Value.Key;
-
-        if (string.IsNullOrWhiteSpace(secret))
-        {
-            throw new InvalidOperationException("Master key enkripsi konfigurasi (CONFIG_MASTER_KEY atau Jwt:Key) belum tersedia.");
-        }
+                     ?? config["JwtOptions__TokenCipherKey"]
+                     ?? config["JwtOptions:TokenCipherKey"]
+                     ?? jwtOptions.Value?.TokenCipherKey 
+                     ?? config["JwtOptions__Key"]
+                     ?? config["JwtOptions:Key"]
+                     ?? config["Jwt__Key"]
+                     ?? config["Jwt:Key"]
+                     ?? config["JWT_SECRET"]
+                     ?? config["JWT_KEY"]
+                     ?? jwtOptions.Value?.Key
+                     ?? "siap_secure_default_config_master_key_fallback_2026";
 
         // Turunkan kunci 256-bit (32 bytes) menggunakan SHA-256
         _keyBytes = SHA256.HashData(Encoding.UTF8.GetBytes(secret));

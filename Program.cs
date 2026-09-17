@@ -179,7 +179,11 @@ builder.Services.AddCors(options =>
                   {
                       var uri = new Uri(origin);
                       return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || 
-                             uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase);
+                             uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                             uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase) ||
+                             uri.Host.Equals("vercel.app", StringComparison.OrdinalIgnoreCase) ||
+                             uri.Host.EndsWith(".rechanpage.my.id", StringComparison.OrdinalIgnoreCase) ||
+                             uri.Host.Equals("rechanpage.my.id", StringComparison.OrdinalIgnoreCase);
                   }
                   catch
                   {

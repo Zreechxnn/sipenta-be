@@ -30,7 +30,7 @@ public class GlobalExceptionMiddleware
             var problem = new ProblemDetails
             {
                 Title = "Terjadi kesalahan pada server.",
-                Detail = "Silakan coba beberapa saat lagi.",
+                Detail = ex.Message,
                 Status = 500,
                 Instance = context.Request.Path
             };

@@ -33,7 +33,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 {
     public string ProviderName => "GoogleDrive";
 
-    private readonly DriveService _driveService;
+    private DriveService? _driveService;
     private readonly string _folderId;
     private readonly string? _imageFolderId;
     private readonly ILogger<GoogleDriveService> _logger;
@@ -43,56 +43,69 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         _logger = logger;
         
         var tokenJson = config["GoogleDrive:TokenJson"] ?? config["GoogleDrive__TokenJson"];
-        _folderId = config["GoogleDrive:FolderId"] ?? config["GoogleDrive__FolderId"] 
-                    ?? throw new ArgumentNullException("GoogleDrive__FolderId configuration is missing.");
-                    
+        _folderId = config["GoogleDrive:FolderId"] ?? config["GoogleDrive__FolderId"] ?? "";
         _imageFolderId = config["GoogleDrive:Folder_image"] ?? config["GoogleDrive__Folder_image"];
 
-        if (string.IsNullOrEmpty(tokenJson))
+        if (string.IsNullOrEmpty(tokenJson) || string.IsNullOrEmpty(_folderId))
         {
-            throw new ArgumentNullException("GoogleDrive__TokenJson configuration is missing.");
+            _logger.LogWarning("Kredensial GoogleDrive (TokenJson atau FolderId) belum disetel di environment.");
+            return;
         }
 
-        tokenJson = tokenJson.Trim('\'');
-        var tokenData = JsonSerializer.Deserialize<GoogleDriveToken>(tokenJson);
-        if (tokenData == null)
+        try
         {
-            throw new Exception("Invalid GoogleDrive Token JSON");
-        }
-
-        var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
-        {
-            ClientSecrets = new ClientSecrets
+            tokenJson = tokenJson.Trim('\'');
+            var tokenData = JsonSerializer.Deserialize<GoogleDriveToken>(tokenJson);
+            if (tokenData == null)
             {
-                ClientId = tokenData.ClientId,
-                ClientSecret = tokenData.ClientSecret
-            },
-            Scopes = new[] { DriveService.Scope.Drive }
-        });
+                _logger.LogWarning("Format GoogleDrive Token JSON tidak valid.");
+                return;
+            }
 
-        var tokenResponse = new TokenResponse
-        {
-            AccessToken = tokenData.Token,
-            RefreshToken = tokenData.RefreshToken,
-        };
+            var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
+            {
+                ClientSecrets = new ClientSecrets
+                {
+                    ClientId = tokenData.ClientId,
+                    ClientSecret = tokenData.ClientSecret
+                },
+                Scopes = new[] { DriveService.Scope.Drive }
+            });
 
-        if (tokenData.Expiry.HasValue)
-        {
-            // Set so the Google client knows exactly when it expires and can preemptively refresh
-            // without waiting for a 401 Unauthorized error
-            tokenResponse.IssuedUtc = DateTime.UtcNow;
-            var expiresIn = (long)(tokenData.Expiry.Value.ToUniversalTime() - DateTime.UtcNow).TotalSeconds;
-            // If already expired, set to 0 or negative so it refreshes immediately on first use
-            tokenResponse.ExpiresInSeconds = expiresIn > 0 ? expiresIn : 0;
+            var tokenResponse = new TokenResponse
+            {
+                AccessToken = tokenData.Token,
+                RefreshToken = tokenData.RefreshToken,
+            };
+
+            if (tokenData.Expiry.HasValue)
+            {
+                tokenResponse.IssuedUtc = DateTime.UtcNow;
+                var expiresIn = (long)(tokenData.Expiry.Value.ToUniversalTime() - DateTime.UtcNow).TotalSeconds;
+                tokenResponse.ExpiresInSeconds = expiresIn > 0 ? expiresIn : 0;
+            }
+
+            var credential = new UserCredential(flow, "user", tokenResponse);
+
+            _driveService = new DriveService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = "SIAP API"
+            });
         }
-
-        var credential = new UserCredential(flow, "user", tokenResponse);
-
-        _driveService = new DriveService(new BaseClientService.Initializer
+        catch (Exception ex)
         {
-            HttpClientInitializer = credential,
-            ApplicationName = "SIAP API"
-        });
+            _logger.LogWarning(ex, "Gagal menginisialisasi GoogleDriveService.");
+        }
+    }
+
+    private DriveService GetClient()
+    {
+        if (_driveService == null)
+        {
+            throw new InvalidOperationException("Kredensial Google Drive belum dikonfigurasi di environment server (GoogleDrive__TokenJson / GoogleDrive__FolderId).");
+        }
+        return _driveService;
     }
 
     public async Task<string> UploadFileAsync(IFormFile file, string fileName)
@@ -104,7 +117,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         };
 
         using var stream = file.OpenReadStream();
-        var request = _driveService.Files.Create(fileMetadata, stream, file.ContentType);
+        var request = GetClient().Files.Create(fileMetadata, stream, file.ContentType);
         request.Fields = "id";
         
         var progress = await request.UploadAsync();
@@ -130,7 +143,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         };
 
         using var stream = new MemoryStream(fileBytes);
-        var request = _driveService.Files.Create(fileMetadata, stream, contentType);
+        var request = GetClient().Files.Create(fileMetadata, stream, contentType);
         request.Fields = "id";
         
         var progress = await request.UploadAsync();
@@ -148,7 +161,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
     {
         try
         {
-            await _driveService.Files.Delete(fileId).ExecuteAsync();
+            await GetClient().Files.Delete(fileId).ExecuteAsync();
         }
         catch (Exception ex)
         {
@@ -160,7 +173,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
     public async Task<Stream> DownloadFileAsync(string fileId)
     {
         var stream = new MemoryStream();
-        var request = _driveService.Files.Get(fileId);
+        var request = GetClient().Files.Get(fileId);
         var progress = await request.DownloadAsync(stream);
         
         if (progress.Status == Google.Apis.Download.DownloadStatus.Failed)
@@ -176,7 +189,8 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
     {
         try
         {
-            var request = _driveService.About.Get();
+            if (_driveService == null) return false;
+            var request = GetClient().About.Get();
             request.Fields = "user";
             var result = await request.ExecuteAsync();
             return result != null;
