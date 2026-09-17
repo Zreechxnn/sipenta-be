@@ -15,6 +15,7 @@ public class ConfigCipherService : IConfigCipherService
 {
     private const string Prefix = "enc:v1:";
     private readonly byte[] _keyBytes;
+    private readonly List<byte[]> _candidateKeyBytes = new();
     private readonly ILogger<ConfigCipherService> _logger;
 
     public ConfigCipherService(
@@ -24,21 +25,37 @@ public class ConfigCipherService : IConfigCipherService
     {
         _logger = logger;
 
-        var secret = config["CONFIG_MASTER_KEY"] 
-                     ?? config["JwtOptions__TokenCipherKey"]
-                     ?? config["JwtOptions:TokenCipherKey"]
-                     ?? jwtOptions.Value?.TokenCipherKey 
-                     ?? config["JwtOptions__Key"]
-                     ?? config["JwtOptions:Key"]
-                     ?? config["Jwt__Key"]
-                     ?? config["Jwt:Key"]
-                     ?? config["JWT_SECRET"]
-                     ?? config["JWT_KEY"]
-                     ?? jwtOptions.Value?.Key
-                     ?? "siap_secure_default_config_master_key_fallback_2026";
+        var candidateSecrets = new List<string?>
+        {
+            config["CONFIG_MASTER_KEY"],
+            config["JwtOptions__TokenCipherKey"],
+            config["JwtOptions:TokenCipherKey"],
+            jwtOptions.Value?.TokenCipherKey,
+            config["JwtOptions__Key"],
+            config["JwtOptions:Key"],
+            config["Jwt__Key"],
+            config["Jwt:Key"],
+            config["JWT_SECRET"],
+            config["JWT_KEY"],
+            jwtOptions.Value?.Key,
+            "siap_aes256_super_secure_token_cipher_secret_key_rechan_2026",
+            "this_is_a_very_long_secret_key_for_jwt_authentication_in_siap_app",
+            "siap_secure_default_config_master_key_fallback_2026"
+        };
 
-        // Turunkan kunci 256-bit (32 bytes) menggunakan SHA-256
-        _keyBytes = SHA256.HashData(Encoding.UTF8.GetBytes(secret));
+        var uniqueSecrets = candidateSecrets
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!.Trim())
+            .Distinct()
+            .ToList();
+
+        var primarySecret = uniqueSecrets.FirstOrDefault() ?? "siap_secure_default_config_master_key_fallback_2026";
+        _keyBytes = SHA256.HashData(Encoding.UTF8.GetBytes(primarySecret));
+
+        foreach (var sec in uniqueSecrets)
+        {
+            _candidateKeyBytes.Add(SHA256.HashData(Encoding.UTF8.GetBytes(sec)));
+        }
     }
 
     public bool IsEncrypted(string? value)
@@ -107,15 +124,41 @@ public class ConfigCipherService : IConfigCipherService
             var cipherBytes = Convert.FromBase64String(parts[2]);
 
             var plainBytes = new byte[cipherBytes.Length];
-            using var aesGcm = new AesGcm(_keyBytes, 16);
-            aesGcm.Decrypt(nonce, cipherBytes, tag, plainBytes);
 
-            return Encoding.UTF8.GetString(plainBytes);
+            // 1. Coba dengan primary active key
+            try
+            {
+                using var aesGcm = new AesGcm(_keyBytes, 16);
+                aesGcm.Decrypt(nonce, cipherBytes, tag, plainBytes);
+                return Encoding.UTF8.GetString(plainBytes);
+            }
+            catch (CryptographicException)
+            {
+                // 2. Coba fallback kandidat kunci yang lain jika kunci utama berbeda environment
+                foreach (var candidateKey in _candidateKeyBytes)
+                {
+                    if (candidateKey.SequenceEqual(_keyBytes)) continue;
+
+                    try
+                    {
+                        using var candidateGcm = new AesGcm(candidateKey, 16);
+                        candidateGcm.Decrypt(nonce, cipherBytes, tag, plainBytes);
+                        _logger.LogInformation("Ciphertext konfigurasi berhasil didekripsi menggunakan candidate fallback key.");
+                        return Encoding.UTF8.GetString(plainBytes);
+                    }
+                    catch (CryptographicException)
+                    {
+                        // Lanjut ke kandidat berikutnya
+                    }
+                }
+
+                _logger.LogError("Integritas atau kunci dekripsi konfigurasi tidak valid untuk semua kandidat kunci.");
+                throw new InvalidOperationException("Gagal mendekripsi nilai konfigurasi (Authentication tag mismatch).");
+            }
         }
-        catch (CryptographicException ex)
+        catch (InvalidOperationException)
         {
-            _logger.LogError(ex, "Integritas atau kunci dekripsi konfigurasi tidak valid.");
-            throw new InvalidOperationException("Gagal mendekripsi nilai konfigurasi (Authentication tag mismatch).", ex);
+            throw;
         }
         catch (Exception ex)
         {

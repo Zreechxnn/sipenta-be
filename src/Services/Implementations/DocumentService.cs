@@ -355,8 +355,34 @@ public class DocumentService : IDocumentService
             throw new KeyNotFoundException("Dokumen tidak ditemukan.");
 
         var stream = await _driveService.DownloadFileAsync(document.Path);
+        var mimeType = ResolveMimeType(document.MimeType, document.NamaFile);
 
-        return (stream, document.MimeType, document.NamaFile);
+        return (stream, mimeType, document.NamaFile);
+    }
+
+    private static string ResolveMimeType(string? mimeType, string fileName)
+    {
+        if (!string.IsNullOrWhiteSpace(mimeType) && mimeType != "application/octet-stream")
+        {
+            return mimeType;
+        }
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "application/pdf",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            ".svg" => "image/svg+xml",
+            ".txt" => "text/plain",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls" => "application/vnd.ms-excel",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            _ => "application/octet-stream"
+        };
     }
 
     public async Task<DocumentChunkListResponseDto> GetChunksAsync(Guid id)
