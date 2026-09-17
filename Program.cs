@@ -214,10 +214,17 @@ builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategyF
 builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkService, SIAP.Api.Services.Chunking.Implementations.ChunkService>();
 
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
+
+builder.Services.AddScoped<ISystemConfigService, SystemConfigService>();
+builder.Services.AddScoped<GoogleDriveService>();
+builder.Services.AddScoped<IGoogleDriveService, CloudStorageManager>();
+builder.Services.AddScoped<ICloudStorageService, CloudStorageManager>();
 
 builder.Services.AddScoped<ILoginRateLimiter, LoginRateLimiter>();
-builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
 builder.Services.AddSingleton<ITokenCipherService, TokenCipherService>();
+builder.Services.AddSingleton<IConfigCipherService, ConfigCipherService>();
+builder.Services.AddScoped<ISudoElevationService, SudoElevationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IUserService, UserService>();
@@ -254,6 +261,19 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.ExecuteSqlRaw("UPDATE \"Roles\" SET \"Name\" = 'kasubag' WHERE \"Name\" = 'kabid';");
+    }
+    catch (Exception ex)
+    {
+        Serilog.Log.Warning(ex, "Failed to run startup DB role migration for kasubag");
+    }
+}
 
 var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "Images");
 if (!Directory.Exists(uploadsDir))

@@ -24,6 +24,7 @@ public class DocumentRepository : IDocumentRepository
             .Include(x => x.Accesses)
                 .ThenInclude(a => a.User)
                     .ThenInclude(u => u.Bidang)
+            .Include(x => x.Images)
             .FirstOrDefaultAsync(x => x.Id == id);
     }
 

@@ -114,7 +114,7 @@ public class UserController : ControllerBase
         {
             if (bidangId.HasValue)
             {
-                // Admin bidang / Kasubag hanya melihat Tenaga Ahli di bidangnya sendiri serta calon pendaftar yang belum diapprove
+                // Admin bidang / Kepala Bidang hanya melihat Tenaga Ahli di bidangnya sendiri serta calon pendaftar yang belum diapprove
                 users = users.Where(u => u.BidangId == bidangId.Value || (!u.IsApproved && (u.BidangId == null || u.BidangId == bidangId.Value)));
             }
             else
@@ -306,7 +306,7 @@ public class UserController : ControllerBase
                 var profile = await _userService.GetUserByIdAsync(userId.Value);
                 if (!profile.IsApproved)
                 {
-                    return StatusCode(403, new { message = "Akun Anda sedang menunggu persetujuan dari Admin/Kasubag." });
+                    return StatusCode(403, new { message = "Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang." });
                 }
             }
 

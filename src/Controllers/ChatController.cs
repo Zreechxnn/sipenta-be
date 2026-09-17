@@ -229,7 +229,7 @@ PANDUAN:
             var isSuperAdmin = dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase);
             if (!isSuperAdmin && !dbUser.IsApproved)
             {
-                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag dan penentuan bidang."));
+                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang dan penentuan bidang."));
             }
 
             var topK = request.TopK <= 0 ? 12 : request.TopK;
