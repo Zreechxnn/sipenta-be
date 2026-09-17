@@ -191,6 +191,39 @@ public class ChatController : ControllerBase
                 _dbContext.ChatSessions.Add(session);
             }
 
+            // Periksa apakah layanan AI aktif (sesuai konfigurasi dinamis administrator)
+            if (!await _groqService.IsLlmConfiguredAndActiveAsync())
+            {
+                var inactiveUserMsg = new ChatMessage
+                {
+                    ChatSession = session,
+                    Role = "user",
+                    Content = request.Message
+                };
+                _dbContext.ChatMessages.Add(inactiveUserMsg);
+
+                var inactiveMsg = "Layanan asisten AI saat ini sedang dinonaktifkan oleh administrator sistem (seluruh kunci API LLM dalam status nonaktif). Harap aktifkan minimal satu kunci API di menu Konfigurasi Sistem untuk menggunakan fitur ini kembali.";
+                var inactiveAiMsg = new ChatMessage
+                {
+                    ChatSession = session,
+                    Role = "assistant",
+                    Content = inactiveMsg,
+                    Sources = "[]"
+                };
+                _dbContext.ChatMessages.Add(inactiveAiMsg);
+
+                await _dbContext.SaveChangesAsync();
+
+                await _hubContext.Clients.All.SendAsync("ChatSessionUpdated", new { SessionId = session.Id, UserId = userId });
+
+                return Ok(ApiResponse<object>.Ok(new
+                {
+                    SessionId = session.Id,
+                    Answer = inactiveMsg,
+                    Sources = Array.Empty<object>()
+                }, "Layanan AI sedang dinonaktifkan"));
+            }
+
             // 1. Rewrite and extract optimal search keywords
             var searchQuery = request.Message;
             try
