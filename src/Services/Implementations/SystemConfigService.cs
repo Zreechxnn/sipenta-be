@@ -150,6 +150,29 @@ public class SystemConfigService : ISystemConfigService
                 var parsed = JsonSerializer.Deserialize<LlmConfigListDto>(decrypted);
                 if (parsed != null && parsed.Endpoints.Any())
                 {
+                    bool hadUnencryptedKeyInDb = false;
+                    foreach (var ep in parsed.Endpoints)
+                    {
+                        if (!string.IsNullOrWhiteSpace(ep.ApiKey))
+                        {
+                            if (!_cipherService.IsEncrypted(ep.ApiKey))
+                            {
+                                hadUnencryptedKeyInDb = true;
+                            }
+                            else
+                            {
+                                // Decrypt in-memory for internal backend consumption
+                                ep.ApiKey = _cipherService.Decrypt(ep.ApiKey);
+                            }
+                        }
+                    }
+
+                    if (hadUnencryptedKeyInDb)
+                    {
+                        // Auto-migrate: re-save to ensure inner keys in DB are strictly encrypted
+                        await SaveLlmConfigsAsync(parsed, "System (Auto Encryption)");
+                    }
+
                     _cache.Set(LlmCacheKey, parsed, TimeSpan.FromMinutes(5));
                     return parsed;
                 }
@@ -235,7 +258,26 @@ public class SystemConfigService : ISystemConfigService
             endpoint.Priority = p++;
         }
 
-        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        // Dual-Layer Encryption: encrypt individual API keys inside the JSON payload
+        var configToPersist = new LlmConfigListDto
+        {
+            Endpoints = config.Endpoints.Select(e => new LlmEndpointConfigDto
+            {
+                Id = e.Id,
+                Name = e.Name,
+                Provider = e.Provider,
+                ApiKey = string.IsNullOrWhiteSpace(e.ApiKey)
+                    ? string.Empty
+                    : (_cipherService.IsEncrypted(e.ApiKey) ? e.ApiKey : _cipherService.Encrypt(e.ApiKey)),
+                BaseUrl = e.BaseUrl,
+                Model = e.Model,
+                ImageModel = e.ImageModel,
+                IsActive = e.IsActive,
+                Priority = e.Priority
+            }).ToList()
+        };
+
+        var json = JsonSerializer.Serialize(configToPersist, new JsonSerializerOptions { WriteIndented = true });
         var encryptedValue = _cipherService.Encrypt(json);
         var existing = await _dbContext.SystemSettings.FirstOrDefaultAsync(s => s.Key == LlmSettingKey);
         if (existing == null)
@@ -358,6 +400,56 @@ public class SystemConfigService : ISystemConfigService
                 var parsed = JsonSerializer.Deserialize<StorageConfigDto>(decrypted);
                 if (parsed != null)
                 {
+                    bool hadUnencryptedInDb = false;
+
+                    if (parsed.GoogleDrive != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(parsed.GoogleDrive.TokenJson))
+                        {
+                            if (!_cipherService.IsEncrypted(parsed.GoogleDrive.TokenJson))
+                                hadUnencryptedInDb = true;
+                            else
+                                parsed.GoogleDrive.TokenJson = _cipherService.Decrypt(parsed.GoogleDrive.TokenJson);
+                        }
+                        if (!string.IsNullOrWhiteSpace(parsed.GoogleDrive.ClientSecret))
+                        {
+                            if (!_cipherService.IsEncrypted(parsed.GoogleDrive.ClientSecret))
+                                hadUnencryptedInDb = true;
+                            else
+                                parsed.GoogleDrive.ClientSecret = _cipherService.Decrypt(parsed.GoogleDrive.ClientSecret);
+                        }
+                    }
+
+                    if (parsed.Supabase != null && !string.IsNullOrWhiteSpace(parsed.Supabase.ApiKey))
+                    {
+                        if (!_cipherService.IsEncrypted(parsed.Supabase.ApiKey))
+                            hadUnencryptedInDb = true;
+                        else
+                            parsed.Supabase.ApiKey = _cipherService.Decrypt(parsed.Supabase.ApiKey);
+                    }
+
+                    if (parsed.S3Compatible != null && !string.IsNullOrWhiteSpace(parsed.S3Compatible.SecretKey))
+                    {
+                        if (!_cipherService.IsEncrypted(parsed.S3Compatible.SecretKey))
+                            hadUnencryptedInDb = true;
+                        else
+                            parsed.S3Compatible.SecretKey = _cipherService.Decrypt(parsed.S3Compatible.SecretKey);
+                    }
+
+                    if (parsed.WebDav != null && !string.IsNullOrWhiteSpace(parsed.WebDav.Password))
+                    {
+                        if (!_cipherService.IsEncrypted(parsed.WebDav.Password))
+                            hadUnencryptedInDb = true;
+                        else
+                            parsed.WebDav.Password = _cipherService.Decrypt(parsed.WebDav.Password);
+                    }
+
+                    if (hadUnencryptedInDb)
+                    {
+                        // Auto-migrate: re-save to ensure inner secrets in DB are strictly encrypted
+                        await SaveStorageConfigAsync(parsed, "System (Auto Encryption)");
+                    }
+
                     _cache.Set(StorageCacheKey, parsed, TimeSpan.FromMinutes(5));
                     return parsed;
                 }
@@ -497,7 +589,61 @@ public class SystemConfigService : ISystemConfigService
             }
         };
 
-        var json = JsonSerializer.Serialize(merged, new JsonSerializerOptions { WriteIndented = true });
+        // Dual-Layer Encryption: encrypt individual secrets inside the stored JSON payload
+        var storageToPersist = new StorageConfigDto
+        {
+            ActiveProvider = merged.ActiveProvider,
+            GoogleDrive = new GoogleDriveSettingsDto
+            {
+                TokenJson = !string.IsNullOrWhiteSpace(merged.GoogleDrive?.TokenJson)
+                    ? (_cipherService.IsEncrypted(merged.GoogleDrive.TokenJson) ? merged.GoogleDrive.TokenJson : _cipherService.Encrypt(merged.GoogleDrive.TokenJson))
+                    : string.Empty,
+                FolderId = merged.GoogleDrive?.FolderId ?? string.Empty,
+                FolderImageId = merged.GoogleDrive?.FolderImageId ?? string.Empty,
+                ClientId = merged.GoogleDrive?.ClientId ?? string.Empty,
+                ClientSecret = !string.IsNullOrWhiteSpace(merged.GoogleDrive?.ClientSecret)
+                    ? (_cipherService.IsEncrypted(merged.GoogleDrive.ClientSecret) ? merged.GoogleDrive.ClientSecret : _cipherService.Encrypt(merged.GoogleDrive.ClientSecret))
+                    : string.Empty
+            },
+            LocalStorage = merged.LocalStorage,
+            Supabase = new SupabaseSettingsDto
+            {
+                ProjectUrl = merged.Supabase?.ProjectUrl ?? string.Empty,
+                ApiKey = !string.IsNullOrWhiteSpace(merged.Supabase?.ApiKey)
+                    ? (_cipherService.IsEncrypted(merged.Supabase.ApiKey) ? merged.Supabase.ApiKey : _cipherService.Encrypt(merged.Supabase.ApiKey))
+                    : string.Empty,
+                BucketName = merged.Supabase?.BucketName ?? "documents",
+                DocumentFolder = merged.Supabase?.DocumentFolder ?? "documents",
+                ImageFolder = merged.Supabase?.ImageFolder ?? "images"
+            },
+            S3Compatible = new S3SettingsDto
+            {
+                Endpoint = merged.S3Compatible?.Endpoint ?? string.Empty,
+                BucketName = merged.S3Compatible?.BucketName ?? "documents",
+                AccessKey = merged.S3Compatible?.AccessKey ?? string.Empty,
+                SecretKey = !string.IsNullOrWhiteSpace(merged.S3Compatible?.SecretKey)
+                    ? (_cipherService.IsEncrypted(merged.S3Compatible.SecretKey) ? merged.S3Compatible.SecretKey : _cipherService.Encrypt(merged.S3Compatible.SecretKey))
+                    : string.Empty,
+                Region = merged.S3Compatible?.Region ?? "us-east-1",
+                ProviderType = merged.S3Compatible?.ProviderType ?? "S3Compatible",
+                DocumentPrefix = merged.S3Compatible?.DocumentPrefix ?? "documents",
+                ImagePrefix = merged.S3Compatible?.ImagePrefix ?? "images"
+            },
+            WebDav = new WebDavSettingsDto
+            {
+                ServerUrl = merged.WebDav?.ServerUrl ?? string.Empty,
+                Username = merged.WebDav?.Username ?? string.Empty,
+                Password = !string.IsNullOrWhiteSpace(merged.WebDav?.Password)
+                    ? (_cipherService.IsEncrypted(merged.WebDav.Password) ? merged.WebDav.Password : _cipherService.Encrypt(merged.WebDav.Password))
+                    : string.Empty,
+                RemotePath = merged.WebDav?.RemotePath ?? "siap",
+                Preset = merged.WebDav?.Preset ?? "Nextcloud",
+                DocumentPath = merged.WebDav?.DocumentPath ?? "documents",
+                ImagePath = merged.WebDav?.ImagePath ?? "images"
+            }
+        };
+
+        var json = JsonSerializer.Serialize(storageToPersist, new JsonSerializerOptions { WriteIndented = true });
         var encryptedValue = _cipherService.Encrypt(json);
         if (existing == null)
         {
@@ -1012,6 +1158,137 @@ public class SystemConfigService : ISystemConfigService
             "$1••••••••••••",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase
         );
+    }
+
+    #endregion
+
+    #region Auto-Encryption & Database Hardening
+
+    public async Task EnsureAllConfigurationsEncryptedAsync()
+    {
+        try
+        {
+            var settings = await _dbContext.SystemSettings.ToListAsync();
+            bool anyModified = false;
+
+            foreach (var setting in settings)
+            {
+                if (string.IsNullOrWhiteSpace(setting.Value)) continue;
+
+                // 1. Ensure the outer row payload in SystemSettings.Value is encrypted
+                if (!_cipherService.IsEncrypted(setting.Value))
+                {
+                    setting.Value = _cipherService.Encrypt(setting.Value);
+                    setting.UpdatedAt = DateTime.UtcNow;
+                    setting.UpdatedBy = "System (Auto Encryption)";
+                    anyModified = true;
+                    _logger.LogInformation("Baris konfigurasi '{Key}' dienkripsi ke AES-256-GCM.", setting.Key);
+                }
+
+                // 2. Defense-in-depth: Ensure inner sensitive credentials inside stored JSON are also encrypted
+                if (setting.Key == LlmSettingKey)
+                {
+                    try
+                    {
+                        var decrypted = _cipherService.Decrypt(setting.Value);
+                        var parsed = JsonSerializer.Deserialize<LlmConfigListDto>(decrypted);
+                        if (parsed != null && parsed.Endpoints.Any())
+                        {
+                            bool innerModified = false;
+                            foreach (var ep in parsed.Endpoints)
+                            {
+                                if (!string.IsNullOrWhiteSpace(ep.ApiKey) && !_cipherService.IsEncrypted(ep.ApiKey))
+                                {
+                                    ep.ApiKey = _cipherService.Encrypt(ep.ApiKey);
+                                    innerModified = true;
+                                }
+                            }
+
+                            if (innerModified)
+                            {
+                                var updatedJson = JsonSerializer.Serialize(parsed, new JsonSerializerOptions { WriteIndented = true });
+                                setting.Value = _cipherService.Encrypt(updatedJson);
+                                setting.UpdatedAt = DateTime.UtcNow;
+                                setting.UpdatedBy = "System (Deep Encryption)";
+                                anyModified = true;
+                                _logger.LogInformation("Kunci sensitif dalam '{Key}' berhasil dienkripsi ganda di database.", setting.Key);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Gagal memverifikasi enkripsi mendalam untuk {Key}.", setting.Key);
+                    }
+                }
+                else if (setting.Key == StorageSettingKey)
+                {
+                    try
+                    {
+                        var decrypted = _cipherService.Decrypt(setting.Value);
+                        var parsed = JsonSerializer.Deserialize<StorageConfigDto>(decrypted);
+                        if (parsed != null)
+                        {
+                            bool innerModified = false;
+                            if (parsed.GoogleDrive != null)
+                            {
+                                if (!string.IsNullOrWhiteSpace(parsed.GoogleDrive.TokenJson) && !_cipherService.IsEncrypted(parsed.GoogleDrive.TokenJson))
+                                {
+                                    parsed.GoogleDrive.TokenJson = _cipherService.Encrypt(parsed.GoogleDrive.TokenJson);
+                                    innerModified = true;
+                                }
+                                if (!string.IsNullOrWhiteSpace(parsed.GoogleDrive.ClientSecret) && !_cipherService.IsEncrypted(parsed.GoogleDrive.ClientSecret))
+                                {
+                                    parsed.GoogleDrive.ClientSecret = _cipherService.Encrypt(parsed.GoogleDrive.ClientSecret);
+                                    innerModified = true;
+                                }
+                            }
+                            if (parsed.Supabase != null && !string.IsNullOrWhiteSpace(parsed.Supabase.ApiKey) && !_cipherService.IsEncrypted(parsed.Supabase.ApiKey))
+                            {
+                                parsed.Supabase.ApiKey = _cipherService.Encrypt(parsed.Supabase.ApiKey);
+                                innerModified = true;
+                            }
+                            if (parsed.S3Compatible != null && !string.IsNullOrWhiteSpace(parsed.S3Compatible.SecretKey) && !_cipherService.IsEncrypted(parsed.S3Compatible.SecretKey))
+                            {
+                                parsed.S3Compatible.SecretKey = _cipherService.Encrypt(parsed.S3Compatible.SecretKey);
+                                innerModified = true;
+                            }
+                            if (parsed.WebDav != null && !string.IsNullOrWhiteSpace(parsed.WebDav.Password) && !_cipherService.IsEncrypted(parsed.WebDav.Password))
+                            {
+                                parsed.WebDav.Password = _cipherService.Encrypt(parsed.WebDav.Password);
+                                innerModified = true;
+                            }
+
+                            if (innerModified)
+                            {
+                                var updatedJson = JsonSerializer.Serialize(parsed, new JsonSerializerOptions { WriteIndented = true });
+                                setting.Value = _cipherService.Encrypt(updatedJson);
+                                setting.UpdatedAt = DateTime.UtcNow;
+                                setting.UpdatedBy = "System (Deep Encryption)";
+                                anyModified = true;
+                                _logger.LogInformation("Kredensial penyimpanan dalam '{Key}' berhasil dienkripsi ganda di database.", setting.Key);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Gagal memverifikasi enkripsi mendalam untuk {Key}.", setting.Key);
+                    }
+                }
+            }
+
+            if (anyModified)
+            {
+                await _dbContext.SaveChangesAsync();
+                _cache.Remove(LlmCacheKey);
+                _cache.Remove(StorageCacheKey);
+                _cache.Remove(DatabaseCacheKey);
+                _logger.LogInformation("Seluruh konfigurasi sistem dan kredensial sensitif di tabel SystemSettings berhasil diverifikasi dan dienkripsi AES-256-GCM.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Gagal menjalankan EnsureAllConfigurationsEncryptedAsync.");
+        }
     }
 
     #endregion
