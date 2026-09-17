@@ -9,6 +9,7 @@ using SIAP.Api.Services.Interfaces;
 using SIAP.Api.Services.Parsers;
 using SIAP.Api.Services.Chunking.Interfaces;
 using SIAP.Api.Hubs;
+using Microsoft.EntityFrameworkCore;
 
 namespace SIAP.Api.Services.Implementations;
 
@@ -196,7 +197,20 @@ public class DocumentProcessingService : BackgroundService
 
                         if (extractedImages.Any())
                         {
-                            var oldImages = dbContext.DocumentImages.Where(di => di.DocumentId == document.Id);
+                            var oldImages = await dbContext.DocumentImages.Where(di => di.DocumentId == document.Id).ToListAsync(stoppingToken);
+                            foreach (var oldImg in oldImages)
+                            {
+                                var rawPath = oldImg.FilePath;
+                                if (rawPath.StartsWith("/api/Documents/images/", StringComparison.OrdinalIgnoreCase))
+                                    rawPath = rawPath.Substring("/api/Documents/images/".Length);
+                                else if (rawPath.StartsWith("/api/documents/images/", StringComparison.OrdinalIgnoreCase))
+                                    rawPath = rawPath.Substring("/api/documents/images/".Length);
+
+                                if (!string.IsNullOrWhiteSpace(rawPath))
+                                {
+                                    try { await driveService.DeleteFileAsync(rawPath.TrimStart('/')); } catch { }
+                                }
+                            }
                             dbContext.DocumentImages.RemoveRange(oldImages);
 
                             var uploadTasks = extractedImages.Select(async (img, index) => 

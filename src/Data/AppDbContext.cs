@@ -20,11 +20,19 @@ public class AppDbContext : DbContext
     public DbSet<ChatSession> ChatSessions { get; set; }
     public DbSet<ChatMessage> ChatMessages { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<SystemSetting> SystemSettings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.HasPostgresExtension("vector");
+        if (Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
+        {
+            modelBuilder.HasPostgresExtension("vector");
+        }
+        else
+        {
+            modelBuilder.Entity<DocumentChunk>().Ignore(c => c.Embedding);
+        }
 
         // Bidang config
         modelBuilder.Entity<Bidang>(entity =>
@@ -140,6 +148,12 @@ public class AppDbContext : DbContext
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SystemSetting config
+        modelBuilder.Entity<SystemSetting>(entity =>
+        {
+            entity.HasKey(s => s.Key);
         });
 
         // Seeding Data

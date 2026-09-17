@@ -31,6 +31,8 @@ public class GoogleDriveToken
 
 public class GoogleDriveService : Interfaces.IGoogleDriveService
 {
+    public string ProviderName => "GoogleDrive";
+
     private readonly DriveService _driveService;
     private readonly string _folderId;
     private readonly string? _imageFolderId;
@@ -168,5 +170,21 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 
         stream.Position = 0; // Reset position for reading
         return stream;
+    }
+
+    public async Task<bool> TestConnectionAsync()
+    {
+        try
+        {
+            var request = _driveService.About.Get();
+            request.Fields = "user";
+            var result = await request.ExecuteAsync();
+            return result != null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google Drive test connection failed.");
+            return false;
+        }
     }
 }

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SIAP.Api.Services.Interfaces;
 
@@ -13,12 +14,14 @@ public class GroqService : IGroqService
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<GroqService>? _logger;
-    private readonly List<LlmEndpointConfig> _configs = new();
+    private readonly IServiceProvider _serviceProvider;
+    private readonly List<LlmEndpointConfig> _fallbackConfigs = new();
 
-    public GroqService(HttpClient httpClient, IConfiguration configuration, ILogger<GroqService>? logger = null)
+    public GroqService(HttpClient httpClient, IConfiguration configuration, IServiceProvider serviceProvider, ILogger<GroqService>? logger = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _serviceProvider = serviceProvider;
 
         LoadConfigurations(configuration);
     }
@@ -36,7 +39,7 @@ public class GroqService : IGroqService
 
         if (!string.IsNullOrWhiteSpace(primaryKey))
         {
-            _configs.Add(new LlmEndpointConfig(primaryKey.Trim(), primaryUrl.Trim(), primaryModel.Trim(), primaryImage.Trim(), "Primary (Llm)"));
+            _fallbackConfigs.Add(new LlmEndpointConfig(primaryKey.Trim(), primaryUrl.Trim(), primaryModel.Trim(), primaryImage.Trim(), "Primary (Llm)"));
         }
 
         for (int i = 2; i <= 10; i++)
@@ -47,7 +50,7 @@ public class GroqService : IGroqService
                 var url = configuration[$"Llm:BaseUrl{i}"] ?? configuration[$"Llm:baseurl{i}"] ?? primaryUrl;
                 var model = configuration[$"Llm:Model{i}"] ?? configuration[$"Llm:model{i}"] ?? primaryModel;
                 var image = configuration[$"Llm:Image{i}"] ?? configuration[$"Llm:image{i}"] ?? primaryImage;
-                _configs.Add(new LlmEndpointConfig(key.Trim(), url.Trim(), model.Trim(), image.Trim(), $"Fallback {i} (Llm{i})"));
+                _fallbackConfigs.Add(new LlmEndpointConfig(key.Trim(), url.Trim(), model.Trim(), image.Trim(), $"Fallback {i} (Llm{i})"));
             }
         }
     }
@@ -148,14 +151,49 @@ public class GroqService : IGroqService
 
     private async Task<string> SendWithFallbackAsync(IEnumerable<object> messages, bool isVision, CancellationToken cancellationToken)
     {
-        if (!_configs.Any())
+        var configs = new List<LlmEndpointConfig>();
+        try
         {
-            return "Llm API Key is not configured in environment variables or appsettings.json. Please configure Llm:ApiKey.";
+            using var scope = _serviceProvider.CreateScope();
+            var configService = scope.ServiceProvider.GetService<ISystemConfigService>();
+            if (configService != null)
+            {
+                var dynamicConfigs = await configService.GetLlmConfigsAsync();
+                var active = dynamicConfigs.Endpoints
+                    .Where(e => e.IsActive && !string.IsNullOrWhiteSpace(e.ApiKey))
+                    .OrderBy(e => e.Priority)
+                    .ToList();
+
+                foreach (var ep in active)
+                {
+                    configs.Add(new LlmEndpointConfig(
+                        ep.ApiKey.Trim(),
+                        string.IsNullOrWhiteSpace(ep.BaseUrl) ? "https://api.groq.com/openai/v1/chat/completions" : ep.BaseUrl.Trim(),
+                        string.IsNullOrWhiteSpace(ep.Model) ? "openai/gpt-oss-120b" : ep.Model.Trim(),
+                        string.IsNullOrWhiteSpace(ep.ImageModel) ? "qwen/qwen3.8-27b" : ep.ImageModel.Trim(),
+                        string.IsNullOrWhiteSpace(ep.Name) ? "Configured LLM" : ep.Name.Trim()
+                    ));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Could not load dynamic LLM configs from database. Falling back to static configs.");
+        }
+
+        if (!configs.Any())
+        {
+            configs = _fallbackConfigs;
+        }
+
+        if (!configs.Any())
+        {
+            return "Llm API Key is not configured in environment variables, appsettings.json, or database. Please configure LLM API Keys in Admin Configuration.";
         }
 
         var errors = new List<string>();
 
-        foreach (var config in _configs)
+        foreach (var config in configs)
         {
             var selectedModel = isVision ? config.ImageModel : config.Model;
             try

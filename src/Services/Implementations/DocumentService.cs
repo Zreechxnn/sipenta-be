@@ -9,6 +9,7 @@ using SIAP.Api.Services.Interfaces;
 using SIAP.Api.Services.Chunking.Interfaces;
 using SIAP.Api.Services.Parsers;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 
 namespace SIAP.Api.Services.Implementations;
 
@@ -194,15 +195,83 @@ public class DocumentService : IDocumentService
         if (document == null)
             throw new KeyNotFoundException("Dokumen tidak ditemukan.");
 
+        // Ambil daftar seluruh gambar yang terhubung ke dokumen ini sebelum data di database dihapus
+        var images = await _dbContext.DocumentImages
+            .Where(di => di.DocumentId == id)
+            .ToListAsync();
+
+        var imagePathsToDelete = images
+            .Select(img => img.FilePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(ExtractRawStorageIdentifier)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct()
+            .ToList();
+
         await _repository.ExecuteInTransactionAsync(async () =>
         {
+            // 1. Hapus record dokumen di database (cascade delete otomatis menghapus tabel relasi di DB)
             await _repository.DeleteAsync(document);
-            try {
-                await _driveService.DeleteFileAsync(document.Path);
-            } catch (Exception ex) {
-                _logger.LogWarning(ex, "Failed to delete file from Google Drive. It might have been deleted already.");
+
+            // 2. Hapus berkas dokumen utama dari penyimpanan (Cloud / Local Storage)
+            if (!string.IsNullOrWhiteSpace(document.Path))
+            {
+                try 
+                {
+                    await _driveService.DeleteFileAsync(document.Path);
+                    _logger.LogInformation("Berhasil menghapus berkas dokumen utama '{Path}' dari storage.", document.Path);
+                } 
+                catch (Exception ex) 
+                {
+                    _logger.LogWarning(ex, "Gagal menghapus berkas dokumen utama '{Path}' dari storage.", document.Path);
+                }
+            }
+
+            // 3. Hapus SEMUA berkas gambar yang terhubung ke dokumen ini dari penyimpanan
+            foreach (var imgPath in imagePathsToDelete)
+            {
+                try
+                {
+                    await _driveService.DeleteFileAsync(imgPath);
+                    _logger.LogInformation("Berhasil menghapus gambar terhubung '{ImagePath}' untuk dokumen {DocumentId} dari storage.", imgPath, id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Gagal menghapus berkas gambar terhubung '{ImagePath}' dari storage.", imgPath);
+                }
+
+                // 4. Bersihkan file cache disk lokal jika ada
+                try
+                {
+                    var cacheDir = Path.Combine(Path.GetTempPath(), "siap_image_cache");
+                    var safeFileId = string.Join("_", imgPath.Split(Path.GetInvalidFileNameChars()));
+                    var cacheFilePath = Path.Combine(cacheDir, $"{safeFileId}.bin");
+                    if (File.Exists(cacheFilePath))
+                    {
+                        File.Delete(cacheFilePath);
+                    }
+                }
+                catch
+                {
+                    // Abaikan kesalahan pembersihan cache lokal
+                }
             }
         });
+    }
+
+    private static string ExtractRawStorageIdentifier(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) return string.Empty;
+        var clean = filePath.Trim();
+        if (clean.StartsWith("/api/Documents/images/", StringComparison.OrdinalIgnoreCase))
+        {
+            clean = clean.Substring("/api/Documents/images/".Length);
+        }
+        else if (clean.StartsWith("/api/documents/images/", StringComparison.OrdinalIgnoreCase))
+        {
+            clean = clean.Substring("/api/documents/images/".Length);
+        }
+        return clean.TrimStart('/');
     }
 
     public async Task<DocumentResponseDto> GetByIdAsync(Guid id, Guid? currentUserId = null, bool isAdmin = false)
@@ -549,7 +618,15 @@ public class DocumentService : IDocumentService
 
         if (extractedImages.Any())
         {
-            var oldImages = _dbContext.DocumentImages.Where(di => di.DocumentId == document.Id);
+            var oldImages = await _dbContext.DocumentImages.Where(di => di.DocumentId == document.Id).ToListAsync();
+            foreach (var oldImg in oldImages)
+            {
+                var cleanPath = ExtractRawStorageIdentifier(oldImg.FilePath);
+                if (!string.IsNullOrWhiteSpace(cleanPath))
+                {
+                    try { await _driveService.DeleteFileAsync(cleanPath); } catch { }
+                }
+            }
             _dbContext.DocumentImages.RemoveRange(oldImages);
 
             int imgIndex = 1;

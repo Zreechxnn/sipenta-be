@@ -69,7 +69,7 @@ public class DocumentsController : ControllerBase
                 return Unauthorized(ApiResponse<List<DocumentResponseDto>>.Gagal("Pengguna tidak terautentikasi."));
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<List<DocumentResponseDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag dan penentuan bidang."));
+                return StatusCode(403, ApiResponse<List<DocumentResponseDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang dan penentuan bidang."));
 
             if (request.Files == null || !request.Files.Any())
                 return BadRequest(ApiResponse<List<DocumentResponseDto>>.Gagal("Tidak ada file yang diupload."));
@@ -129,7 +129,7 @@ public class DocumentsController : ControllerBase
             var (userId, userBidangId, userBidang, isAdmin, isApproved) = await GetCurrentUserAsync();
             if (!isAdmin && !isApproved)
             {
-                return StatusCode(403, ApiResponse<PagedResponse<DocumentResponseDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag dan penentuan bidang."));
+                return StatusCode(403, ApiResponse<PagedResponse<DocumentResponseDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang dan penentuan bidang."));
             }
 
             var result = await _service.GetAllAsync(request, userId, userBidangId, isAdmin);
@@ -169,7 +169,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var hasAccess = await _repository.HasAccessAsync(guidId, userId.Value, userBidangId, isAdmin);
             if (!hasAccess)
@@ -209,7 +209,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<string>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<string>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var hasAccess = await _repository.HasAccessAsync(guidId, userId.Value, userBidangId, isAdmin);
             if (!hasAccess)
@@ -242,7 +242,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var result = await _service.GetAccessesAsync(docId, userId.Value, isAdmin);
             return Ok(ApiResponse<List<DocumentAccessUserDto>>.Ok(result));
@@ -273,7 +273,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var result = await _service.ShareAsync(docId, request.Username, userId.Value, isAdmin);
 
@@ -307,7 +307,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<object>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             await _service.RevokeAccessAsync(docId, targetId, userId.Value, isAdmin);
 
@@ -453,7 +453,7 @@ public class DocumentsController : ControllerBase
             var isKasubag = User.IsInRole("kasubag");
             if (!isAdmin && !isKasubag && doc.UserId != userId.Value)
             {
-                return StatusCode(403, ApiResponse<bool>.Gagal("Hanya pemilik dokumen, admin, atau kasubag yang dapat menghapus dokumen ini."));
+                return StatusCode(403, ApiResponse<bool>.Gagal("Hanya pemilik dokumen, admin, atau Kasubag yang dapat menghapus dokumen ini."));
             }
 
             if (isKasubag && doc.BidangId != userBidangId)
@@ -491,7 +491,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var hasAccess = await _repository.HasAccessAsync(guidId, userId.Value, userBidangId, isAdmin);
             if (!hasAccess)
@@ -568,7 +568,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<PagedResponse<SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<PagedResponse<SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var (items, totalCount) = await _repository.GetAllChunksAsync(pageNumber, pageSize, keyword, userId, userBidangId, isAdmin);
             var response = items.Select(c => new SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto
@@ -623,7 +623,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var hasAccess = await _repository.HasAccessAsync(docId, userId.Value, userBidangId, isAdmin);
             if (!hasAccess)
@@ -809,7 +809,7 @@ public class DocumentsController : ControllerBase
                 contextBuilder.AppendLine("---");
             }
 
-            var systemPrompt = @"Anda adalah asisten AI dari aplikasi SIPENTA (Sistem Pelaporan Tenaga Ahli) yang membantu Kasubag dan pegawai Diskominfo memahami serta mereview laporan kerja tenaga ahli.
+            var systemPrompt = @"Anda adalah asisten AI dari aplikasi SIPENTA (Sistem Pelaporan Tenaga Ahli) yang membantu Kepala Bidang dan pegawai Diskominfo memahami serta mereview laporan kerja tenaga ahli.
 PANDUAN:
 1. Jawab berdasarkan informasi pada konteks dokumen laporan kerja yang diberikan secara ringkas dan objektif.
 2. Gunakan bahasa profesional namun mudah dipahami, gunakan format Markdown yang rapi (bullet list, cetak tebal).
@@ -844,7 +844,7 @@ PANDUAN:
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<string>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kasubag."));
+                return StatusCode(403, ApiResponse<string>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var docImage = await _dbContext.DocumentImages.FirstOrDefaultAsync(di => di.FilePath.Contains(fileId) || di.FileName.Contains(fileId));
             if (docImage == null)

@@ -10,7 +10,7 @@ public static class SnippetHelper
         if (string.IsNullOrWhiteSpace(keyword))
         {
             return rawText.Length > defaultLength ? rawText.Substring(0, defaultLength) : rawText;
-        }
+        } 
 
         int index = rawText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase);
 

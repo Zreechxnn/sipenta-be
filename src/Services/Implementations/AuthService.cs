@@ -339,6 +339,7 @@ public class AuthService : IAuthService
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         var roleName = user.Role?.Name ?? "user";
+
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
