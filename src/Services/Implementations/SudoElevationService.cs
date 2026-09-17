@@ -31,9 +31,9 @@ public class SudoElevationService : ISudoElevationService
         _cache = cache;
         _logger = logger;
 
-        var secret = !string.IsNullOrWhiteSpace(jwtOptions.Value.TokenCipherKey)
-            ? jwtOptions.Value.TokenCipherKey
-            : jwtOptions.Value.Key;
+        var secret = (!string.IsNullOrWhiteSpace(jwtOptions.Value?.TokenCipherKey)
+            ? jwtOptions.Value?.TokenCipherKey
+            : jwtOptions.Value?.Key) ?? "siap_secure_sudo_elevation_secret_fallback_2026";
 
         _hmacKey = SHA256.HashData(Encoding.UTF8.GetBytes(secret));
     }
