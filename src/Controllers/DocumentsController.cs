@@ -196,7 +196,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpGet("{id}/download")]
-    public async Task<IActionResult> Download(string id)
+    public async Task<IActionResult> Download(string id, [FromQuery] bool inline = false)
     {
         try
         {
@@ -218,6 +218,13 @@ public class DocumentsController : ControllerBase
             }
 
             var (fileStream, contentType, fileName) = await _service.DownloadAsync(guidId);
+
+            if (inline)
+            {
+                Response.Headers["Content-Disposition"] = $"inline; filename=\"{fileName}\"; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                return File(fileStream, contentType, enableRangeProcessing: true);
+            }
+
             return File(fileStream, contentType, fileName, enableRangeProcessing: true);
         }
         catch (KeyNotFoundException ex)
@@ -228,6 +235,12 @@ public class DocumentsController : ControllerBase
         {
             return BadRequest(ApiResponse<string>.Gagal(ex.Message));
         }
+    }
+
+    [HttpGet("{id}/view")]
+    public async Task<IActionResult> View(string id)
+    {
+        return await Download(id, inline: true);
     }
 
     [HttpGet("{id}/shares")]
