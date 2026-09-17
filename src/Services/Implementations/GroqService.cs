@@ -149,9 +149,8 @@ public class GroqService : IGroqService
         return await SendWithFallbackAsync(textMessages, isVision: false, cancellationToken);
     }
 
-    private async Task<string> SendWithFallbackAsync(IEnumerable<object> messages, bool isVision, CancellationToken cancellationToken)
+    public async Task<bool> IsLlmConfiguredAndActiveAsync()
     {
-        var configs = new List<LlmEndpointConfig>();
         try
         {
             using var scope = _serviceProvider.CreateScope();
@@ -159,20 +158,68 @@ public class GroqService : IGroqService
             if (configService != null)
             {
                 var dynamicConfigs = await configService.GetLlmConfigsAsync();
-                var active = dynamicConfigs.Endpoints
-                    .Where(e => e.IsActive && !string.IsNullOrWhiteSpace(e.ApiKey))
-                    .OrderBy(e => e.Priority)
-                    .ToList();
-
-                foreach (var ep in active)
+                if (dynamicConfigs?.Endpoints != null && dynamicConfigs.Endpoints.Any())
                 {
-                    configs.Add(new LlmEndpointConfig(
-                        ep.ApiKey.Trim(),
-                        string.IsNullOrWhiteSpace(ep.BaseUrl) ? "https://api.groq.com/openai/v1/chat/completions" : ep.BaseUrl.Trim(),
-                        string.IsNullOrWhiteSpace(ep.Model) ? "openai/gpt-oss-120b" : ep.Model.Trim(),
-                        string.IsNullOrWhiteSpace(ep.ImageModel) ? "qwen/qwen3.8-27b" : ep.ImageModel.Trim(),
-                        string.IsNullOrWhiteSpace(ep.Name) ? "Configured LLM" : ep.Name.Trim()
-                    ));
+                    return dynamicConfigs.Endpoints.Any(e => e.IsActive && !string.IsNullOrWhiteSpace(e.ApiKey));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to check LLM active status from database.");
+        }
+
+        return _fallbackConfigs.Any(c => !string.IsNullOrWhiteSpace(c.ApiKey));
+    }
+
+    private async Task<string> SendWithFallbackAsync(IEnumerable<object> messages, bool isVision, CancellationToken cancellationToken)
+    {
+        var configs = new List<LlmEndpointConfig>();
+        bool hasExplicitDatabaseConfigs = false;
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var configService = scope.ServiceProvider.GetService<ISystemConfigService>();
+            var cipherService = scope.ServiceProvider.GetService<IConfigCipherService>();
+
+            if (configService != null)
+            {
+                var dynamicConfigs = await configService.GetLlmConfigsAsync();
+                if (dynamicConfigs?.Endpoints != null && dynamicConfigs.Endpoints.Any())
+                {
+                    hasExplicitDatabaseConfigs = true;
+                    var active = dynamicConfigs.Endpoints
+                        .Where(e => e.IsActive && !string.IsNullOrWhiteSpace(e.ApiKey))
+                        .OrderBy(e => e.Priority)
+                        .ToList();
+
+                    foreach (var ep in active)
+                    {
+                        var rawKey = ep.ApiKey.Trim();
+                        if (cipherService != null && cipherService.IsEncrypted(rawKey))
+                        {
+                            try
+                            {
+                                rawKey = cipherService.Decrypt(rawKey);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger?.LogWarning(ex, "Could not decrypt API key for endpoint {Name}", ep.Name);
+                            }
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(rawKey))
+                        {
+                            configs.Add(new LlmEndpointConfig(
+                                rawKey,
+                                string.IsNullOrWhiteSpace(ep.BaseUrl) ? "https://api.groq.com/openai/v1/chat/completions" : ep.BaseUrl.Trim(),
+                                string.IsNullOrWhiteSpace(ep.Model) ? "openai/gpt-oss-120b" : ep.Model.Trim(),
+                                string.IsNullOrWhiteSpace(ep.ImageModel) ? "qwen/qwen3.8-27b" : ep.ImageModel.Trim(),
+                                string.IsNullOrWhiteSpace(ep.Name) ? "Configured LLM" : ep.Name.Trim()
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -181,9 +228,22 @@ public class GroqService : IGroqService
             _logger?.LogWarning(ex, "Could not load dynamic LLM configs from database. Falling back to static configs.");
         }
 
-        if (!configs.Any())
+        // Kebijakan: Jika konfigurasi LLM sudah ada di database, keputusan administrator (aktif/nonaktif) bersifat MUTLAK.
+        if (hasExplicitDatabaseConfigs)
         {
-            configs = _fallbackConfigs;
+            if (!configs.Any())
+            {
+                _logger?.LogInformation("Seluruh kunci API LLM di database dalam status nonaktif. Menolak eksekusi permintaan AI.");
+                return "Layanan asisten AI saat ini sedang dinonaktifkan oleh administrator sistem (seluruh kunci API LLM dalam status nonaktif). Harap aktifkan minimal satu kunci API di menu Konfigurasi Sistem untuk menggunakan fitur ini kembali.";
+            }
+        }
+        else
+        {
+            // Jika belum ada konfigurasi di database (misal cold start pertama kali), baru gunakan fallback dari .env / appsettings.json
+            if (!configs.Any())
+            {
+                configs = _fallbackConfigs;
+            }
         }
 
         if (!configs.Any())

@@ -17,4 +17,6 @@ public interface ISystemConfigService
     Task<DatabaseConfigDto> GetDatabaseConfigAsync();
     Task<DatabaseTestResponseDto> TestDatabaseAsync(DatabaseTestRequestDto request);
     Task SaveDatabaseConfigAsync(DatabaseConfigDto request, string? updatedBy = null);
+    
+    Task EnsureAllConfigurationsEncryptedAsync();
 }

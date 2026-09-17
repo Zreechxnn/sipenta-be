@@ -272,10 +272,13 @@ using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.ExecuteSqlRaw("UPDATE \"Roles\" SET \"Name\" = 'kasubag' WHERE \"Name\" = 'kabid';");
+
+        var configService = scope.ServiceProvider.GetRequiredService<ISystemConfigService>();
+        await configService.EnsureAllConfigurationsEncryptedAsync();
     }
     catch (Exception ex)
     {
-        Serilog.Log.Warning(ex, "Failed to run startup DB role migration for kasubag");
+        Serilog.Log.Warning(ex, "Failed to run startup DB role migration or config encryption check");
     }
 }
 

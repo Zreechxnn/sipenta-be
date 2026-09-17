@@ -301,12 +301,25 @@ public class ConfigurationController : ControllerBase
 
         if (request?.Config != null)
         {
-            if (request.Config.GoogleDrive != null && _cipherService.IsEncrypted(request.Config.GoogleDrive.TokenJson))
-                request.Config.GoogleDrive.TokenJson = _cipherService.Decrypt(request.Config.GoogleDrive.TokenJson);
+            if (request.Config.GoogleDrive != null)
+            {
+                if (_cipherService.IsEncrypted(request.Config.GoogleDrive.TokenJson))
+                    request.Config.GoogleDrive.TokenJson = _cipherService.Decrypt(request.Config.GoogleDrive.TokenJson);
+                if (_cipherService.IsEncrypted(request.Config.GoogleDrive.ClientSecret))
+                    request.Config.GoogleDrive.ClientSecret = _cipherService.Decrypt(request.Config.GoogleDrive.ClientSecret);
+            }
+            if (request.Config.Supabase != null && _cipherService.IsEncrypted(request.Config.Supabase.ApiKey))
+            {
+                request.Config.Supabase.ApiKey = _cipherService.Decrypt(request.Config.Supabase.ApiKey);
+            }
             if (request.Config.S3Compatible != null && _cipherService.IsEncrypted(request.Config.S3Compatible.SecretKey))
+            {
                 request.Config.S3Compatible.SecretKey = _cipherService.Decrypt(request.Config.S3Compatible.SecretKey);
+            }
             if (request.Config.WebDav != null && _cipherService.IsEncrypted(request.Config.WebDav.Password))
+            {
                 request.Config.WebDav.Password = _cipherService.Decrypt(request.Config.WebDav.Password);
+            }
         }
 
         var result = await _configService.TestStorageAsync(request?.Config);
@@ -374,6 +387,20 @@ public class ConfigurationController : ControllerBase
         {
             message = "Konfigurasi URL Database berhasil disimpan. Harap restart backend jika ingin menggunakan koneksi database baru.",
             requiresRestart = true
+        });
+    }
+
+    [HttpPost("encrypt-all")]
+    public async Task<IActionResult> EncryptAllConfigurations()
+    {
+        var sudo = CheckSudoElevation();
+        if (sudo != null) return sudo;
+
+        await _configService.EnsureAllConfigurationsEncryptedAsync();
+        return Ok(new
+        {
+            success = true,
+            message = "Seluruh konfigurasi sistem dan kredensial sensitif di tabel SystemSettings database telah diverifikasi dan dienkripsi dengan standar AES-256-GCM."
         });
     }
 }
