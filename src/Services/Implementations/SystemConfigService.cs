@@ -71,9 +71,38 @@ public class SystemConfigService : ISystemConfigService
 
     public async Task<ConfigurationOverviewDto> GetOverviewAsync()
     {
-        var llm = await GetLlmConfigsAsync();
-        var storage = await GetStorageConfigAsync();
-        var db = await GetDatabaseConfigAsync();
+        LlmConfigListDto llm;
+        try
+        {
+            llm = await GetLlmConfigsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GetOverviewAsync: Gagal memuat LLM configs.");
+            llm = new LlmConfigListDto();
+        }
+
+        StorageConfigDto storage;
+        try
+        {
+            storage = await GetStorageConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GetOverviewAsync: Gagal memuat Storage configs.");
+            storage = new StorageConfigDto { ActiveProvider = "GoogleDrive" };
+        }
+
+        DatabaseConfigDto db;
+        try
+        {
+            db = await GetDatabaseConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GetOverviewAsync: Gagal memuat Database config.");
+            db = new DatabaseConfigDto { Host = "localhost", Database = "postgres" };
+        }
 
         bool isDbOk = false;
         try
@@ -87,11 +116,11 @@ public class SystemConfigService : ISystemConfigService
 
         return new ConfigurationOverviewDto
         {
-            TotalLlmKeys = llm.Endpoints.Count,
-            ActiveLlmKeys = llm.Endpoints.Count(e => e.IsActive),
-            ActiveStorageProvider = storage.ActiveProvider,
-            DatabaseHost = db.Host,
-            DatabaseName = db.Database,
+            TotalLlmKeys = llm.Endpoints?.Count ?? 0,
+            ActiveLlmKeys = llm.Endpoints?.Count(e => e.IsActive) ?? 0,
+            ActiveStorageProvider = storage.ActiveProvider ?? "GoogleDrive",
+            DatabaseHost = db.Host ?? "localhost",
+            DatabaseName = db.Database ?? "postgres",
             IsDatabaseConnected = isDbOk
         };
     }
@@ -685,14 +714,36 @@ public class SystemConfigService : ISystemConfigService
         var setting = await _dbContext.SystemSettings.FirstOrDefaultAsync(s => s.Key == DatabaseSettingKey);
         if (setting != null && !string.IsNullOrWhiteSpace(setting.Value))
         {
-            if (!_cipherService.IsEncrypted(setting.Value))
+            try
             {
-                setting.Value = _cipherService.Encrypt(setting.Value);
-                await _dbContext.SaveChangesAsync();
-                _logger.LogInformation("DatabaseConfig setting otomatis dienkripsi dengan AES-256-GCM.");
-            }
+                if (!_cipherService.IsEncrypted(setting.Value))
+                {
+                    setting.Value = _cipherService.Encrypt(setting.Value);
+                    await _dbContext.SaveChangesAsync();
+                    _logger.LogInformation("DatabaseConfig setting otomatis dienkripsi dengan AES-256-GCM.");
+                }
 
-            raw = _cipherService.Decrypt(setting.Value);
+                raw = _cipherService.Decrypt(setting.Value);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Gagal mendekripsi DatabaseConfig dari database. Menggunakan fallback konfigurasi connection string aktif.");
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    try
+                    {
+                        setting.Value = _cipherService.Encrypt(raw);
+                        setting.UpdatedAt = DateTime.UtcNow;
+                        setting.UpdatedBy = "System (Auto Recovery)";
+                        await _dbContext.SaveChangesAsync();
+                        _logger.LogInformation("DatabaseConfig berhasil dipulihkan dan dienkripsi ulang di SystemSettings.");
+                    }
+                    catch (Exception saveEx)
+                    {
+                        _logger.LogWarning(saveEx, "Gagal menyimpan auto recovery DatabaseConfig ke DB.");
+                    }
+                }
+            }
         }
         else if (!string.IsNullOrWhiteSpace(raw))
         {
