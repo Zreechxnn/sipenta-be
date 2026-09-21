@@ -84,7 +84,7 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
                     config.WebDav?.ServerUrl ?? string.Empty,
                     config.WebDav?.Username ?? string.Empty,
                     config.WebDav?.Password ?? string.Empty,
-                    config.WebDav?.RemotePath ?? "siap",
+                    config.WebDav?.RemotePath ?? "sipenta",
                     config.WebDav?.DocumentPath ?? "documents",
                     config.WebDav?.ImagePath ?? "images"
                 );
@@ -155,7 +155,7 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
                 config.WebDav?.ServerUrl ?? string.Empty,
                 config.WebDav?.Username ?? string.Empty,
                 config.WebDav?.Password ?? string.Empty,
-                config.WebDav?.RemotePath ?? "siap",
+                config.WebDav?.RemotePath ?? "sipenta",
                 config.WebDav?.DocumentPath ?? "documents",
                 config.WebDav?.ImagePath ?? "images"
             );

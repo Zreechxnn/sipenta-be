@@ -23,7 +23,7 @@ public class LlmTestRequestDto
     public string ApiKey { get; set; } = string.Empty;
     public string BaseUrl { get; set; } = "https://api.groq.com/openai/v1/chat/completions";
     public string Model { get; set; } = "openai/gpt-oss-120b";
-    public string? TestPrompt { get; set; } = "Halo, uji koneksi sistem SIAP.";
+    public string? TestPrompt { get; set; } = "Halo, uji koneksi sistem SIPENTA.";
 }
 
 public class LlmTestResponseDto
@@ -69,7 +69,7 @@ public class WebDavSettingsDto
     public string ServerUrl { get; set; } = string.Empty; // e.g. https://cloud.instansi.go.id/remote.php/dav/files/user/
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-    public string RemotePath { get; set; } = "siap";
+    public string RemotePath { get; set; } = "sipenta";
     public string Preset { get; set; } = "Nextcloud"; // "Nextcloud", "ownCloud", "PDN", "Custom"
     public string DocumentPath { get; set; } = "documents";
     public string ImagePath { get; set; } = "images";
