@@ -444,6 +444,11 @@ public class SystemConfigService : ISystemConfigService
                             parsed.WebDav.Password = _cipherService.Decrypt(parsed.WebDav.Password);
                     }
 
+                    if (parsed.WebDav != null && (string.IsNullOrWhiteSpace(parsed.WebDav.RemotePath) || parsed.WebDav.RemotePath.Equals("siap", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        parsed.WebDav.RemotePath = "sipenta";
+                    }
+
                     if (hadUnencryptedInDb)
                     {
                         // Auto-migrate: re-save to ensure inner secrets in DB are strictly encrypted
@@ -506,7 +511,7 @@ public class SystemConfigService : ISystemConfigService
                 ServerUrl = "",
                 Username = "",
                 Password = "",
-                RemotePath = "siap",
+                RemotePath = "sipenta",
                 Preset = "Nextcloud",
                 DocumentPath = "documents",
                 ImagePath = "images"
@@ -582,7 +587,9 @@ public class SystemConfigService : ISystemConfigService
                 ServerUrl = !string.IsNullOrWhiteSpace(config.WebDav?.ServerUrl) ? config.WebDav.ServerUrl : (existingConfig.WebDav?.ServerUrl ?? string.Empty),
                 Username = !string.IsNullOrWhiteSpace(config.WebDav?.Username) ? config.WebDav.Username : (existingConfig.WebDav?.Username ?? string.Empty),
                 Password = !string.IsNullOrWhiteSpace(config.WebDav?.Password) ? config.WebDav.Password : (existingConfig.WebDav?.Password ?? string.Empty),
-                RemotePath = !string.IsNullOrWhiteSpace(config.WebDav?.RemotePath) ? config.WebDav.RemotePath : (existingConfig.WebDav?.RemotePath ?? "siap"),
+                RemotePath = !string.IsNullOrWhiteSpace(config.WebDav?.RemotePath) && !config.WebDav.RemotePath.Equals("siap", StringComparison.OrdinalIgnoreCase) 
+                    ? config.WebDav.RemotePath 
+                    : ((!string.IsNullOrWhiteSpace(existingConfig.WebDav?.RemotePath) && !existingConfig.WebDav.RemotePath.Equals("siap", StringComparison.OrdinalIgnoreCase)) ? existingConfig.WebDav.RemotePath : "sipenta"),
                 Preset = !string.IsNullOrWhiteSpace(config.WebDav?.Preset) ? config.WebDav.Preset : (existingConfig.WebDav?.Preset ?? "Nextcloud"),
                 DocumentPath = !string.IsNullOrWhiteSpace(config.WebDav?.DocumentPath) ? config.WebDav.DocumentPath : (existingConfig.WebDav?.DocumentPath ?? "documents"),
                 ImagePath = !string.IsNullOrWhiteSpace(config.WebDav?.ImagePath) ? config.WebDav.ImagePath : (existingConfig.WebDav?.ImagePath ?? "images")
@@ -636,7 +643,7 @@ public class SystemConfigService : ISystemConfigService
                 Password = !string.IsNullOrWhiteSpace(merged.WebDav?.Password)
                     ? (_cipherService.IsEncrypted(merged.WebDav.Password) ? merged.WebDav.Password : _cipherService.Encrypt(merged.WebDav.Password))
                     : string.Empty,
-                RemotePath = merged.WebDav?.RemotePath ?? "siap",
+                RemotePath = (!string.IsNullOrWhiteSpace(merged.WebDav?.RemotePath) && !merged.WebDav.RemotePath.Equals("siap", StringComparison.OrdinalIgnoreCase)) ? merged.WebDav.RemotePath : "sipenta",
                 Preset = merged.WebDav?.Preset ?? "Nextcloud",
                 DocumentPath = merged.WebDav?.DocumentPath ?? "documents",
                 ImagePath = merged.WebDav?.ImagePath ?? "images"
@@ -772,7 +779,7 @@ public class SystemConfigService : ISystemConfigService
                     config.WebDav?.ServerUrl ?? "",
                     config.WebDav?.Username ?? "",
                     config.WebDav?.Password ?? "",
-                    config.WebDav?.RemotePath ?? "siap",
+                    config.WebDav?.RemotePath ?? "sipenta",
                     config.WebDav?.DocumentPath ?? "documents",
                     config.WebDav?.ImagePath ?? "images"
                 );
@@ -1018,10 +1025,10 @@ public class SystemConfigService : ISystemConfigService
             var potentialPaths = new[]
             {
                 Path.Combine(Directory.GetCurrentDirectory(), ".env"),
-                Path.Combine(Directory.GetCurrentDirectory(), "siap-be", ".env"),
+                Path.Combine(Directory.GetCurrentDirectory(), "sipenta-be", ".env"),
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".env"),
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", ".env"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "siap-be", ".env")
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "sipenta-be", ".env")
             };
 
             string? envPath = potentialPaths.FirstOrDefault(File.Exists);

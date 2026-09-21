@@ -26,7 +26,7 @@ public class WebDavStorageProvider : ICloudStorageService
         string serverUrl = "",
         string username = "",
         string password = "",
-        string remotePath = "siap",
+        string remotePath = "sipenta",
         string documentPath = "documents",
         string imagePath = "images")
     {
@@ -35,7 +35,12 @@ public class WebDavStorageProvider : ICloudStorageService
         _username = (username ?? string.Empty).Trim();
         _password = (password ?? string.Empty).Trim();
         _serverUrl = NormalizeWebDavUrl(serverUrl, _username);
-        _remotePath = (remotePath ?? "siap").Trim().Trim('/');
+        var cleanRemote = (remotePath ?? "sipenta").Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(cleanRemote) || cleanRemote.Equals("siap", StringComparison.OrdinalIgnoreCase))
+        {
+            cleanRemote = "sipenta";
+        }
+        _remotePath = cleanRemote;
         _documentPath = string.IsNullOrWhiteSpace(documentPath) ? "documents" : documentPath.Trim().Trim('/');
         _imagePath = string.IsNullOrWhiteSpace(imagePath) ? "images" : imagePath.Trim().Trim('/');
     }
