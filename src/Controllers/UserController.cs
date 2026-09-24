@@ -31,7 +31,7 @@ public class UserController : ControllerBase
         }
 
         var isSuperAdmin = User.IsInRole("admin");
-        var isBidangAdmin = User.IsInRole("admin") || User.IsInRole("kasubag");
+        var isBidangAdmin = User.IsInRole("admin") || User.IsInRole("kepala bagian");
 
         int? bidangId = null;
         var bidangClaim = User.FindFirst("bidangId")?.Value;
@@ -104,7 +104,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,kasubag")]
+    [Authorize(Roles = "admin,kepala bagian")]
     public async Task<IActionResult> GetAllUsers()
     {
         var users = await _userService.GetAllUsersAsync();
@@ -127,7 +127,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = "admin,kasubag")]
+    [Authorize(Roles = "admin,kepala bagian")]
     public async Task<IActionResult> GetUserById(Guid id)
     {
         try
@@ -150,7 +150,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,kasubag")]
+    [Authorize(Roles = "admin,kepala bagian")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
         try
@@ -160,7 +160,7 @@ public class UserController : ControllerBase
             {
                 if (!bidangId.HasValue)
                 {
-                    return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
+                    return Forbid("Admin/Kepala Bagian belum memiliki bidang terdaftar.");
                 }
 
                 request.BidangId = bidangId.Value;
@@ -181,7 +181,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "admin,kasubag")]
+    [Authorize(Roles = "admin,kepala bagian")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request)
     {
         try
@@ -192,12 +192,12 @@ public class UserController : ControllerBase
             {
                 if (!bidangId.HasValue)
                 {
-                    return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
+                    return Forbid("Admin/Kepala Bagian belum memiliki bidang terdaftar.");
                 }
 
                 if (existingUser.IsApproved && existingUser.BidangId != bidangId.Value)
                 {
-                    return Forbid("Admin/Kasubag hanya bisa mengubah Tenaga Ahli di bidangnya sendiri.");
+                    return Forbid("Admin/Kepala Bagian hanya bisa mengubah Tenaga Ahli di bidangnya sendiri.");
                 }
 
                 request.BidangId = bidangId.Value;
@@ -205,7 +205,7 @@ public class UserController : ControllerBase
 
                 if (request.RoleId.HasValue && request.RoleId.Value != 3)
                 {
-                    return Forbid("Admin/Kasubag hanya dapat mengelola Tenaga Ahli.");
+                    return Forbid("Admin/Kepala Bagian hanya dapat mengelola Tenaga Ahli.");
                 }
             }
 
@@ -226,7 +226,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("{id}/approve")]
-    [Authorize(Roles = "admin,kasubag")]
+    [Authorize(Roles = "admin,kepala bagian")]
     public async Task<IActionResult> ApproveUser(Guid id, [FromBody] ApproveUserRequest request)
     {
         try
@@ -236,7 +236,7 @@ public class UserController : ControllerBase
             {
                 if (!bidangId.HasValue)
                 {
-                    return Forbid("Admin/Kasubag belum memiliki bidang terdaftar.");
+                    return Forbid("Admin/Kepala Bagian belum memiliki bidang terdaftar.");
                 }
 
                 request.BidangId = bidangId.Value;
@@ -260,7 +260,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "admin,kasubag")]
+    [Authorize(Roles = "admin,kepala bagian")]
     public async Task<IActionResult> DeleteUser(Guid id)
     {
         try
@@ -275,9 +275,9 @@ public class UserController : ControllerBase
                 }
 
                 if ((existingUser.IsApproved && existingUser.BidangId != bidangId.Value) || 
-                    existingUser.Role == "admin" || existingUser.Role == "kasubag")
+                    existingUser.Role == "admin" || existingUser.Role == "kepala bagian")
                 {
-                    return Forbid("Admin/Kasubag hanya bisa menghapus Tenaga Ahli di bidangnya sendiri.");
+                    return Forbid("Admin/Kepala Bagian hanya bisa menghapus Tenaga Ahli di bidangnya sendiri.");
                 }
             }
 
