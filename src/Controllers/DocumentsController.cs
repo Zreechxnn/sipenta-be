@@ -57,7 +57,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,user,kepala bagian")]
+    [Authorize(Roles = "admin,user,kepala bidang")]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = 524_288_000, ValueCountLimit = 5000)]
     public async Task<IActionResult> Upload([FromForm] DocumentCreateDto request)
@@ -343,7 +343,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "admin,user,kepala bagian")]
+    [Authorize(Roles = "admin,user,kepala bidang")]
     public async Task<IActionResult> Update(string id, [FromBody] DocumentUpdateDto request)
     {
         try
@@ -363,15 +363,15 @@ public class DocumentsController : ControllerBase
             if (doc == null)
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Dokumen tidak ditemukan." });
 
-            var isKepalaBagian = User.IsInRole("kepala bagian");
-            if (!isAdmin && !isKepalaBagian && doc.UserId != userId.Value)
+            var isKepalaBidang = User.IsInRole("kepala bidang");
+            if (!isAdmin && !isKepalaBidang && doc.UserId != userId.Value)
             {
                 return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Hanya pemilik dokumen atau admin yang dapat mengubah dokumen ini."));
             }
 
-            if (isKepalaBagian && doc.BidangId != userBidangId)
+            if (isKepalaBidang && doc.BidangId != userBidangId)
             {
-                return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Kepala Bagian hanya dapat mengubah dokumen di bidangnya sendiri."));
+                return StatusCode(403, ApiResponse<DocumentResponseDto>.Gagal("Kepala Bidang hanya dapat mengubah dokumen di bidangnya sendiri."));
             }
 
             if (!isAdmin)
@@ -443,7 +443,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "admin,user,kepala bagian")]
+    [Authorize(Roles = "admin,user,kepala bidang")]
     public async Task<IActionResult> Delete(string id)
     {
         try
@@ -463,15 +463,15 @@ public class DocumentsController : ControllerBase
             if (doc == null)
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Dokumen tidak ditemukan." });
 
-            var isKepalaBagian = User.IsInRole("kepala bagian");
-            if (!isAdmin && !isKepalaBagian && doc.UserId != userId.Value)
+            var isKepalaBidang = User.IsInRole("kepala bidang");
+            if (!isAdmin && !isKepalaBidang && doc.UserId != userId.Value)
             {
-                return StatusCode(403, ApiResponse<bool>.Gagal("Hanya pemilik dokumen, admin, atau Kepala Bagian yang dapat menghapus dokumen ini."));
+                return StatusCode(403, ApiResponse<bool>.Gagal("Hanya pemilik dokumen, admin, atau Kepala Bidang yang dapat menghapus dokumen ini."));
             }
 
-            if (isKepalaBagian && doc.BidangId != userBidangId)
+            if (isKepalaBidang && doc.BidangId != userBidangId)
             {
-                return StatusCode(403, ApiResponse<bool>.Gagal("Kepala Bagian hanya dapat menghapus dokumen di bidangnya sendiri."));
+                return StatusCode(403, ApiResponse<bool>.Gagal("Kepala Bidang hanya dapat menghapus dokumen di bidangnya sendiri."));
             }
 
             await _service.DeleteAsync(guidId);
@@ -704,7 +704,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("{id}/reprocess-images")]
-    [Authorize(Roles = "admin,kepala bagian,user")]
+    [Authorize(Roles = "admin,kepala bidang,user")]
     public async Task<IActionResult> ReprocessImages(string id)
     {
         try

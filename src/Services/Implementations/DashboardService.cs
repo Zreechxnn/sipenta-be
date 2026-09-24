@@ -26,7 +26,7 @@ public class DashboardService : IDashboardService
         }
         else
         {
-            // For Kepala Bagian (Admin Bidang) / Bidang-scoped roles:
+            // For Kepala Bidang (Admin Bidang) / Bidang-scoped roles:
             totalUsers = await _context.Users.CountAsync(u => u.BidangId == userBidangId);
             pendingUsers = await _context.Users.CountAsync(u => !u.IsApproved && (u.BidangId == null || u.BidangId == userBidangId));
         }
