@@ -174,7 +174,7 @@ public class AppDbContext : DbContext
 
         // 2. Roles
         modelBuilder.Entity<Role>().HasData(
-            new Role { Id = 1, Name = "kasubag" },
+            new Role { Id = 1, Name = "kepala bidang" },
             new Role { Id = 2, Name = "admin" },
             new Role { Id = 3, Name = "user" }
         );

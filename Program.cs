@@ -271,7 +271,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Database.ExecuteSqlRaw("UPDATE \"Roles\" SET \"Name\" = 'kasubag' WHERE \"Name\" = 'kabid';");
+        db.Database.ExecuteSqlRaw("UPDATE \"Roles\" SET \"Name\" = 'kepala bidang' WHERE \"Name\" IN ('kepala bagian', 'kasubag', 'kabid');");
 
         var configService = scope.ServiceProvider.GetRequiredService<ISystemConfigService>();
         await configService.EnsureAllConfigurationsEncryptedAsync();

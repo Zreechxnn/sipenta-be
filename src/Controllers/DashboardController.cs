@@ -10,7 +10,7 @@ namespace SIAP.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "admin,kasubag")]
+[Authorize(Roles = "admin,kepala bidang")]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboardService;

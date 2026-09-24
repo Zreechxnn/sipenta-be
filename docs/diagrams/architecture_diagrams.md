@@ -11,7 +11,7 @@ Sequence diagram ini menggambarkan interaksi asinkron dari pengunggahan berkas, 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Pengguna as Pegawai / Kasubag / Super Admin
+    actor Pengguna as Pegawai / Kepala Bidang / Super Admin
     participant HTTP as Controllers & Middleware
     participant DS as DocumentService
     participant GDRV as GoogleDriveService (Cloud)
@@ -121,7 +121,7 @@ Memvisualisasikan alur Request dari Klien, verifikasi Token JWT, pemeriksaan Hak
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Pengguna as Pimpinan / Kasubag / Tenaga Ahli
+    actor Pengguna as Pimpinan / Kepala Bidang / Tenaga Ahli
     participant FE as Tampilan Chat Web (/chat)
     participant CTRL as ChatController
     participant AI as GroqService (LLM)
@@ -132,7 +132,7 @@ sequenceDiagram
     Pengguna->>FE: Ajukan pertanyaan: "Apa kegiatan Firman pada 5 Mei?"
     FE->>+CTRL: POST /api/Chat { Message, SessionId? }
     
-    CTRL->>DB: Ambil profil user & peran (Super Admin / Kasubag / User)
+    CTRL->>DB: Ambil profil user & peran (Super Admin / Kepala Bidang / User)
     
     alt SessionId == null (Topik Baru)
         CTRL->>DB: INSERT INTO "ChatSessions" (Title = 47 chars pertama)
