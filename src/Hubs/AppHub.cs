@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authorization;
 
-namespace SIAP.Api.Hubs;
+namespace SIPENTA.Api.Hubs;
 
 [Authorize]
 public class AppHub : Hub

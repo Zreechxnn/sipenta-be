@@ -2,13 +2,13 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.DTOs;
-using SIAP.Api.Hubs;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.DTOs;
+using SIPENTA.Api.Hubs;
+using SIPENTA.Api.Services.Interfaces;
 using System.Security.Claims;
 
-namespace SIAP.Api.Controllers;
+namespace SIPENTA.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -30,7 +30,7 @@ public class AuthController : ControllerBase
         _authService = authService;
         _rateLimiter = rateLimiter;
         _hubContext = hubContext;
-        _dataProtector = dataProtectionProvider.CreateProtector("SIAP.Auth.CookieProtection");
+        _dataProtector = dataProtectionProvider.CreateProtector("SIPENTA.Auth.CookieProtection");
         _jwtOptions = jwtOptions.Value;
     }
 

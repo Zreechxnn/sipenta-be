@@ -1,6 +1,6 @@
-using SIAP.Api.Entities;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.DTOs.Documents;
+namespace SIPENTA.Api.DTOs.Documents;
 
 public class OcrStatusDto
 {

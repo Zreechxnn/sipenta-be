@@ -1,9 +1,9 @@
 using System.Text;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.Entities;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.Services.Chunking.Implementations;
+namespace SIPENTA.Api.Services.Chunking.Implementations;
 
 public class ParagraphChunkStrategy : BaseChunkStrategy
 {

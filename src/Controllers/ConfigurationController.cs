@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SIAP.Api.DTOs;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.DTOs;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Controllers;
+namespace SIPENTA.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]

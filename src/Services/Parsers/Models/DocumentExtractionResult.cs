@@ -1,4 +1,4 @@
-namespace SIAP.Api.Services.Parsers.Models;
+namespace SIPENTA.Api.Services.Parsers.Models;
 
 public class DocumentExtractionResult
 {

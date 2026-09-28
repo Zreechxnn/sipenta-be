@@ -1,4 +1,4 @@
-namespace SIAP.Api.Services.Interfaces;
+namespace SIPENTA.Api.Services.Interfaces;
 
 public record LlmImageInput(byte[] Bytes, string MimeType, string? Caption = null, string? ImageUrl = null);
 

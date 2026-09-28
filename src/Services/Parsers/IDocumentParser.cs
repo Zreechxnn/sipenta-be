@@ -1,6 +1,6 @@
-using SIAP.Api.Services.Parsers.Models;
+using SIPENTA.Api.Services.Parsers.Models;
 
-namespace SIAP.Api.Services.Parsers;
+namespace SIPENTA.Api.Services.Parsers;
 
 public interface IDocumentParser
 {

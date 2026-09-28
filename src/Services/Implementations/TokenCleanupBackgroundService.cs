@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
-using SIAP.Api.Repositories.Interfaces;
+using SIPENTA.Api.Repositories.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 /// <summary>
 /// Background Service yang secara otomatis dan berkala membersihkan refresh token yang telah

@@ -1,4 +1,4 @@
-namespace SIAP.Api.DTOs.Dashboard;
+namespace SIPENTA.Api.DTOs.Dashboard;
 
 public class DashboardSummaryDto
 {

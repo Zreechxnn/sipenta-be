@@ -1,8 +1,8 @@
 using Mapster;
-using SIAP.Api.DTOs.Documents;
-using SIAP.Api.Entities;
+using SIPENTA.Api.DTOs.Documents;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.Configurations;
+namespace SIPENTA.Api.Configurations;
 
 public static class MapsterConfig
 {

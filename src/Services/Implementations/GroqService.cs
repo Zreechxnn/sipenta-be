@@ -4,9 +4,9 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class GroqService : IGroqService
 {

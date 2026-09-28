@@ -15,16 +15,16 @@ RUN apt-get update && \
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
 WORKDIR /src
-COPY ["SIAP.Api.csproj", "./"]
-RUN dotnet restore "./SIAP.Api.csproj"
+COPY ["SIPENTA.Api.csproj", "./"]
+RUN dotnet restore "./SIPENTA.Api.csproj"
 COPY . .
-RUN dotnet build "SIAP.Api.csproj" -c Release -o /app/build
+RUN dotnet build "SIPENTA.Api.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "SIAP.Api.csproj" -c Release -o /app/publish
+RUN dotnet publish "SIPENTA.Api.csproj" -c Release -o /app/publish
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 # Using shell execution to read the dynamic PORT environment variable provided by Render
-ENTRYPOINT ["sh", "-c", "dotnet SIAP.Api.dll --urls http://0.0.0.0:${PORT:-8080}"]
+ENTRYPOINT ["sh", "-c", "dotnet SIPENTA.Api.dll --urls http://0.0.0.0:${PORT:-8080}"]

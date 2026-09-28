@@ -3,13 +3,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using SIAP.Api.Common;
-using SIAP.Api.DTOs.Documents;
-using SIAP.Api.Hubs;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Common;
+using SIPENTA.Api.DTOs.Documents;
+using SIPENTA.Api.Hubs;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Controllers;
+namespace SIPENTA.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -20,7 +20,7 @@ public class DocumentsController : ControllerBase
     private readonly IDocumentRepository _repository;
     private readonly IUserRepository _userRepository;
     private readonly IHubContext<AppHub> _hubContext;
-    private readonly SIAP.Api.Data.AppDbContext _dbContext;
+    private readonly SIPENTA.Api.Data.AppDbContext _dbContext;
     private readonly ILogger<DocumentsController> _logger;
 
     public DocumentsController(
@@ -28,7 +28,7 @@ public class DocumentsController : ControllerBase
         IDocumentRepository repository,
         IUserRepository userRepository,
         IHubContext<AppHub> hubContext,
-        SIAP.Api.Data.AppDbContext dbContext,
+        SIPENTA.Api.Data.AppDbContext dbContext,
         ILogger<DocumentsController> logger)
     {
         _service = service;
@@ -504,7 +504,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
+                return StatusCode(403, ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var hasAccess = await _repository.HasAccessAsync(guidId, userId.Value, userBidangId, isAdmin);
             if (!hasAccess)
@@ -513,7 +513,7 @@ public class DocumentsController : ControllerBase
             }
 
             var result = await _service.GetChunksAsync(guidId);
-            return Ok(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Ok(result));
+            return Ok(ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Ok(result));
         }
         catch (KeyNotFoundException ex)
         {
@@ -521,7 +521,7 @@ public class DocumentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Gagal(ex.Message));
+            return BadRequest(ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkListResponseDto>.Gagal(ex.Message));
         }
     }
 
@@ -581,10 +581,10 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<PagedResponse<SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
+                return StatusCode(403, ApiResponse<PagedResponse<SIPENTA.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var (items, totalCount) = await _repository.GetAllChunksAsync(pageNumber, pageSize, keyword, userId, userBidangId, isAdmin);
-            var response = items.Select(c => new SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto
+            var response = items.Select(c => new SIPENTA.Api.DTOs.Chunks.ChunkWithDocumentDto
             {
                 Id = c.Id,
                 DocumentId = c.DocumentId,
@@ -607,18 +607,18 @@ public class DocumentsController : ControllerBase
                 ProcessingDuration = c.Document?.ProcessingDuration
             }).ToList();
 
-            var pagedResponse = new PagedResponse<SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto>
+            var pagedResponse = new PagedResponse<SIPENTA.Api.DTOs.Chunks.ChunkWithDocumentDto>
             {
                 Data = response,
                 TotalRecords = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize
             };
-            return Ok(ApiResponse<PagedResponse<SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Ok(pagedResponse));
+            return Ok(ApiResponse<PagedResponse<SIPENTA.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Ok(pagedResponse));
         }
         catch (Exception ex)
         {
-            return BadRequest(ApiResponse<PagedResponse<SIAP.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Gagal(ex.Message));
+            return BadRequest(ApiResponse<PagedResponse<SIPENTA.Api.DTOs.Chunks.ChunkWithDocumentDto>>.Gagal(ex.Message));
         }
     }
 
@@ -636,7 +636,7 @@ public class DocumentsController : ControllerBase
             if (!userId.HasValue) return Unauthorized();
 
             if (!isAdmin && !isApproved)
-                return StatusCode(403, ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
+                return StatusCode(403, ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal("Akun Anda sedang menunggu persetujuan dari Admin/Kepala Bidang."));
 
             var hasAccess = await _repository.HasAccessAsync(docId, userId.Value, userBidangId, isAdmin);
             if (!hasAccess)
@@ -645,7 +645,7 @@ public class DocumentsController : ControllerBase
             }
 
             var result = await _service.GetChunkByIdAsync(docId, chId);
-            return Ok(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Ok(result));
+            return Ok(ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkResponseDto>.Ok(result));
         }
         catch (KeyNotFoundException ex)
         {
@@ -653,13 +653,13 @@ public class DocumentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal(ex.Message));
+            return BadRequest(ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal(ex.Message));
         }
     }
 
     [HttpPut("{id}/chunks/{chunkId}")]
     [Authorize(Roles = "admin")]
-    public async Task<IActionResult> UpdateChunk(string id, string chunkId, [FromBody] SIAP.Api.DTOs.Chunks.DocumentChunkUpdateDto request)
+    public async Task<IActionResult> UpdateChunk(string id, string chunkId, [FromBody] SIPENTA.Api.DTOs.Chunks.DocumentChunkUpdateDto request)
     {
         try
         {
@@ -668,7 +668,7 @@ public class DocumentsController : ControllerBase
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "ID Dokumen atau Chunk tidak valid." });
             }
             var result = await _service.UpdateChunkAsync(docId, chId, request);
-            return Ok(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Ok(result, "Chunk berhasil diupdate."));
+            return Ok(ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkResponseDto>.Ok(result, "Chunk berhasil diupdate."));
         }
         catch (KeyNotFoundException ex)
         {
@@ -676,7 +676,7 @@ public class DocumentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(ApiResponse<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal(ex.Message));
+            return BadRequest(ApiResponse<SIPENTA.Api.DTOs.Chunks.DocumentChunkResponseDto>.Gagal(ex.Message));
         }
     }
 
@@ -872,7 +872,7 @@ PANDUAN:
             }
 
             var mimeType = !string.IsNullOrEmpty(docImage.MimeType) ? docImage.MimeType : "image/jpeg";
-            var cacheDir = Path.Combine(Path.GetTempPath(), "siap_image_cache");
+            var cacheDir = Path.Combine(Path.GetTempPath(), "sipenta_image_cache");
             try
             {
                 Directory.CreateDirectory(cacheDir);

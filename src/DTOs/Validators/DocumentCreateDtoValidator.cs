@@ -1,7 +1,7 @@
 using FluentValidation;
-using SIAP.Api.DTOs.Documents;
+using SIPENTA.Api.DTOs.Documents;
 
-namespace SIAP.Api.DTOs.Validators;
+namespace SIPENTA.Api.DTOs.Validators;
 
 public class DocumentCreateDtoValidator : AbstractValidator<DocumentCreateDto>
 {

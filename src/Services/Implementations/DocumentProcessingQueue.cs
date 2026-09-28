@@ -1,7 +1,7 @@
 using System.Threading.Channels;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class DocumentProcessingQueue : IDocumentProcessingQueue
 {

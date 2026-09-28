@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 
-namespace SIAP.Api.Entities;
+namespace SIPENTA.Api.Entities;
 
 public class DocumentChunk
 {

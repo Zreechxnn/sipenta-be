@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Http;
-using SIAP.Api.Common;
-using SIAP.Api.DTOs.Documents;
+using SIPENTA.Api.Common;
+using SIPENTA.Api.DTOs.Documents;
 
-namespace SIAP.Api.Services.Interfaces;
+namespace SIPENTA.Api.Services.Interfaces;
 
 public interface IDocumentService
 {
@@ -15,9 +15,9 @@ public interface IDocumentService
     Task<DocumentStatusDto> GetStatusAsync(Guid id);
     Task<OcrStatusDto> GetOcrStatusAsync(Guid id);
     Task<(Stream FileStream, string ContentType, string FileName)> DownloadAsync(Guid id);
-    Task<SIAP.Api.DTOs.Chunks.DocumentChunkListResponseDto> GetChunksAsync(Guid id);
-    Task<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto> GetChunkByIdAsync(Guid id, Guid chunkId);
-    Task<SIAP.Api.DTOs.Chunks.DocumentChunkResponseDto> UpdateChunkAsync(Guid documentId, Guid chunkId, SIAP.Api.DTOs.Chunks.DocumentChunkUpdateDto request);
+    Task<SIPENTA.Api.DTOs.Chunks.DocumentChunkListResponseDto> GetChunksAsync(Guid id);
+    Task<SIPENTA.Api.DTOs.Chunks.DocumentChunkResponseDto> GetChunkByIdAsync(Guid id, Guid chunkId);
+    Task<SIPENTA.Api.DTOs.Chunks.DocumentChunkResponseDto> UpdateChunkAsync(Guid documentId, Guid chunkId, SIPENTA.Api.DTOs.Chunks.DocumentChunkUpdateDto request);
     Task<bool> RechunkAsync(Guid id, string? strategy = null);
 
     // Document Sharing

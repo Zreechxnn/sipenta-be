@@ -3,15 +3,15 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.SignalR;
-using SIAP.Api.Entities;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Interfaces;
-using SIAP.Api.Services.Parsers;
-using SIAP.Api.Services.Chunking.Interfaces;
-using SIAP.Api.Hubs;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Parsers;
+using SIPENTA.Api.Services.Chunking.Interfaces;
+using SIPENTA.Api.Hubs;
 using Microsoft.EntityFrameworkCore;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class DocumentProcessingService : BackgroundService
 {
@@ -190,7 +190,7 @@ public class DocumentProcessingService : BackgroundService
                     try
                     {
                         var imageExtractor = scope.ServiceProvider.GetRequiredService<IPdfImageExtractor>();
-                        var dbContext = scope.ServiceProvider.GetRequiredService<SIAP.Api.Data.AppDbContext>();
+                        var dbContext = scope.ServiceProvider.GetRequiredService<SIPENTA.Api.Data.AppDbContext>();
                         
                         fileStream.Position = 0;
                         var extractedImages = await imageExtractor.ExtractImagesAsync(fileStream);
@@ -253,7 +253,7 @@ public class DocumentProcessingService : BackgroundService
 
                 if (document.Content != null && !string.IsNullOrWhiteSpace(document.Content.RawText))
                 {
-                    SIAP.Api.Common.DocumentHelper.EnrichDocumentMetadata(document, document.Content.RawText);
+                    SIPENTA.Api.Common.DocumentHelper.EnrichDocumentMetadata(document, document.Content.RawText);
                 }
 
                 var chunkService = scope.ServiceProvider.GetRequiredService<IChunkService>();

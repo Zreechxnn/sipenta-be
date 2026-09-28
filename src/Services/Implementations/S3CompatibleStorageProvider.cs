@@ -4,9 +4,9 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class S3CompatibleStorageProvider : ICloudStorageService, IDisposable
 {

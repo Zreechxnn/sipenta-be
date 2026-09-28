@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class GoogleDriveToken
 {
@@ -90,7 +90,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
             _driveService = new DriveService(new BaseClientService.Initializer
             {
                 HttpClientInitializer = credential,
-                ApplicationName = "SIAP API"
+                ApplicationName = "SIPENTA API"
             });
         }
         catch (Exception ex)

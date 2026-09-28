@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http;
 
-namespace SIAP.Api.DTOs.Documents;
+namespace SIPENTA.Api.DTOs.Documents;
 
 public class DocumentCreateDto
 {

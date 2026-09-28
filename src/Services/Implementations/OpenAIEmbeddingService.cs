@@ -3,9 +3,9 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Pgvector;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class OpenAIEmbeddingService : IEmbeddingService
 {

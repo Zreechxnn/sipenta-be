@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace SIAP.Api.Controllers;
+namespace SIPENTA.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]

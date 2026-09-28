@@ -1,17 +1,17 @@
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using SIAP.Api.Configurations;
-using SIAP.Api.DTOs;
-using SIAP.Api.Entities;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.DTOs;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Google.Apis.Auth;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class AuthService : IAuthService
 {

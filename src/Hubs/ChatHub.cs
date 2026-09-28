@@ -2,9 +2,9 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using SIAP.Api.Data;
+using SIPENTA.Api.Data;
 
-namespace SIAP.Api.Hubs;
+namespace SIPENTA.Api.Hubs;
 
 [Authorize]
 public class ChatHub : Hub

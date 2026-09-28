@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class LocalStorageProvider : ICloudStorageService
 {
@@ -115,10 +115,10 @@ public class LocalStorageProvider : ICloudStorageService
             var testDir = Path.Combine(_basePath, "Test");
             EnsureDirectoryExists(testDir);
             var testFile = Path.Combine(testDir, $"test_{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(testFile, "SIAP Storage Test Ping");
+            File.WriteAllText(testFile, "SIPENTA Storage Test Ping");
             var readBack = File.ReadAllText(testFile);
             File.Delete(testFile);
-            return Task.FromResult(readBack == "SIAP Storage Test Ping");
+            return Task.FromResult(readBack == "SIPENTA Storage Test Ping");
         }
         catch (Exception ex)
         {

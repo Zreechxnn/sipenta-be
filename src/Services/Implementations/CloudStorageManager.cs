@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using SIAP.Api.DTOs;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.DTOs;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
 {

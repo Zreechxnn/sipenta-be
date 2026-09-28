@@ -1,6 +1,6 @@
-# Kumpulan Diagram Arsitektur Mendalam SIAP / SIPENTA
+# Kumpulan Diagram Arsitektur Mendalam SIPENTA
 
-Dokumen ini berisi visualisasi teknis mendalam (*Sequence, Activity, Flowchart, Component*) sesuai dengan implementasi kode terbaru pada sistem **SIAP / SIPENTA** (*.NET 10 & Next.js*), memetakan interaksi, penanganan kegagalan, percabangan logika, hingga proses AI dan Google Drive.
+Dokumen ini berisi visualisasi teknis mendalam (*Sequence, Activity, Flowchart, Component*) sesuai dengan implementasi kode terbaru pada sistem **SIPENTA** (*.NET 10 & Next.js*), memetakan interaksi, penanganan kegagalan, percabangan logika, hingga proses AI dan Google Drive.
 
 ---
 

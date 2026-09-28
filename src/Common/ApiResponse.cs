@@ -1,4 +1,4 @@
-namespace SIAP.Api.Common;
+namespace SIPENTA.Api.Common;
 
 public class ApiResponse<T>
 {

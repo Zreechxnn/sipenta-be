@@ -1,4 +1,4 @@
-namespace SIAP.Api.Configurations;
+namespace SIPENTA.Api.Configurations;
 
 public class ConnectionStrings
 {

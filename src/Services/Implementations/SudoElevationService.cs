@@ -2,15 +2,15 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 /// <summary>
 /// Layanan Step-up Authentication ("Sudo Mode") untuk memverifikasi ulang identitas admin
-/// sebelum membuka atau mengubah konfigurasi sistem SIAP.
+/// sebelum membuka atau mengubah konfigurasi sistem SIPENTA.
 /// Menghasilkan token elevated sementara (15 menit) yang diverifikasi stateless menggunakan HMAC-SHA256.
 /// </summary>
 public class SudoElevationService : ISudoElevationService
@@ -33,7 +33,7 @@ public class SudoElevationService : ISudoElevationService
 
         var secret = (!string.IsNullOrWhiteSpace(jwtOptions.Value?.TokenCipherKey)
             ? jwtOptions.Value?.TokenCipherKey
-            : jwtOptions.Value?.Key) ?? "siap_secure_sudo_elevation_secret_fallback_2026";
+            : jwtOptions.Value?.Key) ?? "sipenta_secure_sudo_elevation_secret_fallback_2026";
 
         _hmacKey = SHA256.HashData(Encoding.UTF8.GetBytes(secret));
     }

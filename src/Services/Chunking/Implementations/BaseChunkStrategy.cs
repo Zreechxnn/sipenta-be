@@ -1,11 +1,11 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.Entities;
-using SIAP.Api.Services.Chunking.Interfaces;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Services.Chunking.Interfaces;
 
-namespace SIAP.Api.Services.Chunking.Implementations;
+namespace SIPENTA.Api.Services.Chunking.Implementations;
 
 public abstract class BaseChunkStrategy : IChunkStrategy
 {
@@ -22,7 +22,7 @@ public abstract class BaseChunkStrategy : IChunkStrategy
 
     protected void ExtractGlobalMetadata(Document document, string rawText)
     {
-        SIAP.Api.Common.DocumentHelper.EnrichDocumentMetadata(document, rawText);
+        SIPENTA.Api.Common.DocumentHelper.EnrichDocumentMetadata(document, rawText);
     }
 
     protected DocumentChunk CreateChunk(Document document, string content, int chunkIndex, int startOffset, int endOffset, string chunkType, ChunkMetadata? localMetadata = null)

@@ -1,4 +1,4 @@
-namespace SIAP.Api.Services.Parsers;
+namespace SIPENTA.Api.Services.Parsers;
 
 public interface IDocumentParserFactory
 {

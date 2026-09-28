@@ -1,4 +1,4 @@
-namespace SIAP.Api.Services.Interfaces;
+namespace SIPENTA.Api.Services.Interfaces;
 
 /// <summary>
 /// Layanan cipher kriptografi untuk mengenkripsi dan mendekripsi token refresh/sesi

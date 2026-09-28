@@ -1,4 +1,4 @@
-namespace SIAP.Api.DTOs;
+namespace SIPENTA.Api.DTOs;
 
 public class UserDto
 {

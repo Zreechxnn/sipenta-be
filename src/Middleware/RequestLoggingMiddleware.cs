@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-namespace SIAP.Api.Middleware;
+namespace SIPENTA.Api.Middleware;
 
 public class RequestLoggingMiddleware
 {

@@ -1,6 +1,6 @@
 
 services:
-  siap-api:
+  sipenta-api:
     build:
       context: .
       dockerfile: Dockerfile
@@ -17,8 +17,8 @@ services:
     volumes:
       - ./Uploads:/app/Uploads
     networks:
-      - siap-net
+      - sipenta-net
 
 networks:
-  siap-net:
+  sipenta-net:
     driver: bridge
