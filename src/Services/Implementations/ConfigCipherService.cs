@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 /// <summary>
 /// Layanan enkripsi data at rest untuk nilai sensitif konfigurasi sistem di database
@@ -38,6 +38,9 @@ public class ConfigCipherService : IConfigCipherService
             config["JWT_SECRET"],
             config["JWT_KEY"],
             jwtOptions.Value?.Key,
+            "sipenta_aes256_super_secure_token_cipher_secret_key_rechan_2026",
+            "this_is_a_very_long_secret_key_for_jwt_authentication_in_sipenta_app",
+            "sipenta_secure_default_config_master_key_fallback_2026",
             "siap_aes256_super_secure_token_cipher_secret_key_rechan_2026",
             "this_is_a_very_long_secret_key_for_jwt_authentication_in_siap_app",
             "siap_secure_default_config_master_key_fallback_2026"
@@ -49,7 +52,7 @@ public class ConfigCipherService : IConfigCipherService
             .Distinct()
             .ToList();
 
-        var primarySecret = uniqueSecrets.FirstOrDefault() ?? "siap_secure_default_config_master_key_fallback_2026";
+        var primarySecret = uniqueSecrets.FirstOrDefault() ?? "sipenta_secure_default_config_master_key_fallback_2026";
         _keyBytes = SHA256.HashData(Encoding.UTF8.GetBytes(primarySecret));
 
         foreach (var sec in uniqueSecrets)

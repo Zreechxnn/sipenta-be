@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 /// <summary>
 /// Implementasi AES-256 Cipher untuk enkripsi deterministik token refresh yang disimpan di database.

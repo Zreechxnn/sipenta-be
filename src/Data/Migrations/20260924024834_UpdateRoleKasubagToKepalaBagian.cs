@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace SIAP.Api.Data.Migrations
+namespace SIPENTA.Api.Data.Migrations
 {
     /// <inheritdoc />
     public partial class UpdateRoleKasubagToKepalaBagian : Migration

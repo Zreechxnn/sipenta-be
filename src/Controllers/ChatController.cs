@@ -3,18 +3,18 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using SIAP.Api.Common;
-using SIAP.Api.Data;
-using SIAP.Api.DTOs.Chat;
-using SIAP.Api.Entities;
-using SIAP.Api.Hubs;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Common;
+using SIPENTA.Api.Data;
+using SIPENTA.Api.DTOs.Chat;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Hubs;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Formats.Jpeg;
 
-namespace SIAP.Api.Controllers;
+namespace SIPENTA.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -463,7 +463,7 @@ PANDUAN:
                                 ? displayPath.Replace("https://drive.google.com/uc?id=", "")
                                 : displayPath.Replace("/api/Documents/images/", "");
 
-                            var cacheDir = Path.Combine(Path.GetTempPath(), "siap_image_cache");
+                            var cacheDir = Path.Combine(Path.GetTempPath(), "sipenta_image_cache");
                             var safeFileId = string.Join("_", fileId.Split(Path.GetInvalidFileNameChars()));
                             var cacheFilePath = Path.Combine(cacheDir, $"{safeFileId}.bin");
 

@@ -1,6 +1,6 @@
-using SIAP.Api.DTOs.Dashboard;
+using SIPENTA.Api.DTOs.Dashboard;
 
-namespace SIAP.Api.Services.Interfaces;
+namespace SIPENTA.Api.Services.Interfaces;
 
 public interface IDashboardService
 {

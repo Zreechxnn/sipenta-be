@@ -1,9 +1,9 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
-using SIAP.Api.Services.Parsers.Models;
+using SIPENTA.Api.Services.Parsers.Models;
 using System.Text;
 
-namespace SIAP.Api.Services.Parsers.Implementations;
+namespace SIPENTA.Api.Services.Parsers.Implementations;
 
 public class DocxDocumentParser : IDocumentParser
 {

@@ -1,4 +1,4 @@
-namespace SIAP.Api.DTOs.Chunks;
+namespace SIPENTA.Api.DTOs.Chunks;
 
 public class DocumentChunkResponseDto
 {

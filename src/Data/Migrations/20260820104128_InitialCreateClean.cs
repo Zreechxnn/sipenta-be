@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -7,7 +7,7 @@ using Pgvector;
 
 #pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
 
-namespace SIAP.Api.Data.Migrations
+namespace SIPENTA.Api.Data.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreateClean : Migration
@@ -202,7 +202,7 @@ namespace SIAP.Api.Data.Migrations
             migrationBuilder.InsertData(
                 table: "Users",
                 columns: new[] { "Id", "CreatedAt", "Email", "FullName", "PasswordHash", "RoleId", "UpdatedAt", "Username" },
-                values: new object[] { new Guid("00000000-0000-0000-0000-000000000002"), new DateTime(2023, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@example.com", "Administrator SIAP", "$2b$12$C0FnFmFwP8AhaBDKbwQOZ.tPOThfbDRIG2gRw8jwxCMZH2ev/Ruf6", 2, null, "admin" });
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000002"), new DateTime(2023, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@example.com", "Administrator SIPENTA", "$2b$12$C0FnFmFwP8AhaBDKbwQOZ.tPOThfbDRIG2gRw8jwxCMZH2ev/Ruf6", 2, null, "admin" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ChatMessages_ChatSessionId",

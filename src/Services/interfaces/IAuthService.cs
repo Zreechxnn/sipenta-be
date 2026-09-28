@@ -1,6 +1,6 @@
-using SIAP.Api.DTOs;
+using SIPENTA.Api.DTOs;
 
-namespace SIAP.Api.Services.Interfaces;
+namespace SIPENTA.Api.Services.Interfaces;
 
 public interface IAuthService
 {

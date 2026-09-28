@@ -2,11 +2,11 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using SIAP.Api.DTOs;
-using SIAP.Api.Hubs;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.DTOs;
+using SIPENTA.Api.Hubs;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Controllers;
+namespace SIPENTA.Api.Controllers;
 
 [Authorize]
 [ApiController]

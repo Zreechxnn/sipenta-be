@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.Entities;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.Services.Chunking.Implementations;
+namespace SIPENTA.Api.Services.Chunking.Implementations;
 
 public class LegalDocumentChunkStrategy : BaseChunkStrategy
 {
@@ -25,7 +25,7 @@ public class LegalDocumentChunkStrategy : BaseChunkStrategy
             return chunks;
 
         ExtractGlobalMetadata(document, rawText);
-        var cleaned = SIAP.Api.Common.DocumentHelper.CleanOcrNoise(rawText);
+        var cleaned = SIPENTA.Api.Common.DocumentHelper.CleanOcrNoise(rawText);
 
         // Determine if it looks like a legal document by finding BAB or Pasal
         bool hasBabOrPasal = Regex.IsMatch(cleaned, @"\bBAB\b\s+[IVXLCDM]+", RegexOptions.IgnoreCase) || 

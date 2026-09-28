@@ -1,6 +1,6 @@
-using SIAP.Api.Services.Chunking.Interfaces;
+using SIPENTA.Api.Services.Chunking.Interfaces;
 
-namespace SIAP.Api.Services.Chunking.Interfaces;
+namespace SIPENTA.Api.Services.Chunking.Interfaces;
 
 public interface IChunkStrategyFactory
 {

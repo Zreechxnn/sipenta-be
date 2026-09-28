@@ -1,17 +1,17 @@
 using MapsterMapper;
 using Microsoft.AspNetCore.Http;
-using SIAP.Api.Common;
-using SIAP.Api.DTOs.Documents;
-using SIAP.Api.DTOs.Chunks;
-using SIAP.Api.Entities;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Interfaces;
-using SIAP.Api.Services.Chunking.Interfaces;
-using SIAP.Api.Services.Parsers;
+using SIPENTA.Api.Common;
+using SIPENTA.Api.DTOs.Documents;
+using SIPENTA.Api.DTOs.Chunks;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Chunking.Interfaces;
+using SIPENTA.Api.Services.Parsers;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class DocumentService : IDocumentService
 {
@@ -27,7 +27,7 @@ public class DocumentService : IDocumentService
     private readonly IDocumentParserFactory _parserFactory;
     private readonly IGroqService _groqService;
     private readonly IPdfImageExtractor _pdfImageExtractor;
-    private readonly SIAP.Api.Data.AppDbContext _dbContext;
+    private readonly SIPENTA.Api.Data.AppDbContext _dbContext;
 
     public DocumentService(
         IDocumentRepository repository,
@@ -41,7 +41,7 @@ public class DocumentService : IDocumentService
         IGroqService groqService,
         IGoogleDriveService driveService,
         IPdfImageExtractor pdfImageExtractor,
-        SIAP.Api.Data.AppDbContext dbContext)
+        SIPENTA.Api.Data.AppDbContext dbContext)
     {
         _repository = repository;
         _userRepository = userRepository;
@@ -243,7 +243,7 @@ public class DocumentService : IDocumentService
                 // 4. Bersihkan file cache disk lokal jika ada
                 try
                 {
-                    var cacheDir = Path.Combine(Path.GetTempPath(), "siap_image_cache");
+                    var cacheDir = Path.Combine(Path.GetTempPath(), "sipenta_image_cache");
                     var safeFileId = string.Join("_", imgPath.Split(Path.GetInvalidFileNameChars()));
                     var cacheFilePath = Path.Combine(cacheDir, $"{safeFileId}.bin");
                     if (File.Exists(cacheFilePath))
@@ -441,7 +441,7 @@ public class DocumentService : IDocumentService
         };
     }
 
-    public async Task<DocumentChunkResponseDto> UpdateChunkAsync(Guid documentId, Guid chunkId, SIAP.Api.DTOs.Chunks.DocumentChunkUpdateDto request)
+    public async Task<DocumentChunkResponseDto> UpdateChunkAsync(Guid documentId, Guid chunkId, SIPENTA.Api.DTOs.Chunks.DocumentChunkUpdateDto request)
     {
         var document = await _repository.GetByIdAsync(documentId);
         if (document == null)

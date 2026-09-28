@@ -1,13 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using SIAP.Api.Common;
-using SIAP.Api.DTOs;
-using SIAP.Api.Entities;
-using SIAP.Api.Hubs;
-using SIAP.Api.Repositories.Interfaces;
+using SIPENTA.Api.Common;
+using SIPENTA.Api.DTOs;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Hubs;
+using SIPENTA.Api.Repositories.Interfaces;
 
-namespace SIAP.Api.Controllers;
+namespace SIPENTA.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]

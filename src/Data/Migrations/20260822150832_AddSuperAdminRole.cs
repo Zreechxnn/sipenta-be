@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 #pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
 
-namespace SIAP.Api.Data.Migrations
+namespace SIPENTA.Api.Data.Migrations
 {
     /// <inheritdoc />
     public partial class AddSuperAdminRole : Migration
@@ -27,7 +27,7 @@ namespace SIAP.Api.Data.Migrations
                 keyColumn: "Id",
                 keyValue: new Guid("00000000-0000-0000-0000-000000000002"),
                 columns: new[] { "Email", "FullName", "RoleId", "Username" },
-                values: new object[] { "superadmin@example.com", "Super Administrator SIAP", 4, "superadmin" });
+                values: new object[] { "superadmin@example.com", "Super Administrator SIPENTA", 4, "superadmin" });
         }
 
         /// <inheritdoc />
@@ -48,7 +48,7 @@ namespace SIAP.Api.Data.Migrations
                 keyColumn: "Id",
                 keyValue: new Guid("00000000-0000-0000-0000-000000000002"),
                 columns: new[] { "Email", "FullName", "RoleId", "Username" },
-                values: new object[] { "admin@example.com", "Administrator SIAP", 2, "admin" });
+                values: new object[] { "admin@example.com", "Administrator SIPENTA", 2, "admin" });
         }
     }
 }

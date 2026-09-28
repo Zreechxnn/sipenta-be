@@ -1,6 +1,6 @@
 using Pgvector;
 
-namespace SIAP.Api.Services.Interfaces;
+namespace SIPENTA.Api.Services.Interfaces;
 
 public interface IEmbeddingService
 {

@@ -1,4 +1,4 @@
-namespace SIAP.Api.Entities;
+namespace SIPENTA.Api.Entities;
 
 public class ChatSession
 {

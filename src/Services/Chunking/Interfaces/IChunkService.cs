@@ -1,6 +1,6 @@
-using SIAP.Api.Entities;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.Services.Chunking.Interfaces;
+namespace SIPENTA.Api.Services.Chunking.Interfaces;
 
 public interface IChunkService
 {

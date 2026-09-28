@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace SIAP.Api.DTOs.Validators;
+namespace SIPENTA.Api.DTOs.Validators;
 
 public class RegisterRequestValidator : AbstractValidator<RegisterRequest>
 {

@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using SIAP.Api.Data;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Chunking.Interfaces;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Data;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Chunking.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace SIAP.Api.Services.Chunking.Implementations;
+namespace SIPENTA.Api.Services.Chunking.Implementations;
 
 public class ChunkService : IChunkService
 {

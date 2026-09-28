@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 
-namespace SIAP.Api.Middleware;
+namespace SIPENTA.Api.Middleware;
 
 public class GlobalExceptionMiddleware
 {

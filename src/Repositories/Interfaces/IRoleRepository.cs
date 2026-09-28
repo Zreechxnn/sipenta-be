@@ -1,6 +1,6 @@
-using SIAP.Api.Entities;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.Repositories.Interfaces;
+namespace SIPENTA.Api.Repositories.Interfaces;
 
 public interface IRoleRepository
 {

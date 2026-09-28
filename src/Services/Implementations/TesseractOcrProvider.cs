@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Text;
 using UglyToad.PdfPig;
-using SIAP.Api.Configurations;
+using SIPENTA.Api.Configurations;
 using Microsoft.Extensions.Options;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class TesseractOcrProvider : IOcrProvider
 {

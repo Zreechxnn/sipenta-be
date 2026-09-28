@@ -5,14 +5,14 @@ using Mapster;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
-using SIAP.Api.Configurations;
-using SIAP.Api.Data;
-using SIAP.Api.Middleware;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Repositories.Implementations;
-using SIAP.Api.Services.Interfaces;
-using SIAP.Api.Services.Implementations;
-using SIAP.Api.Hubs;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Data;
+using SIPENTA.Api.Middleware;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Repositories.Implementations;
+using SIPENTA.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Implementations;
+using SIPENTA.Api.Hubs;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 
@@ -123,7 +123,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "SIAP API", Version = "v1" });
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "SIPENTA API", Version = "v1" });
     
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
@@ -204,18 +204,18 @@ builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IBidangRepository, BidangRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
-builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParser, SIAP.Api.Services.Parsers.Implementations.PdfDocumentParser>();
-builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParser, SIAP.Api.Services.Parsers.Implementations.DocxDocumentParser>();
-builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParser, SIAP.Api.Services.Parsers.Implementations.TxtDocumentParser>();
-builder.Services.AddScoped<SIAP.Api.Services.Parsers.IDocumentParserFactory, SIAP.Api.Services.Parsers.DocumentParserFactory>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Parsers.IDocumentParser, SIPENTA.Api.Services.Parsers.Implementations.PdfDocumentParser>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Parsers.IDocumentParser, SIPENTA.Api.Services.Parsers.Implementations.DocxDocumentParser>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Parsers.IDocumentParser, SIPENTA.Api.Services.Parsers.Implementations.TxtDocumentParser>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Parsers.IDocumentParserFactory, SIPENTA.Api.Services.Parsers.DocumentParserFactory>();
 
-builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.ParagraphChunkStrategy>();
-builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.HeadingChunkStrategy>();
-builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.FixedLengthChunkStrategy>();
-builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.TokenChunkStrategy>();
-builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategy, SIAP.Api.Services.Chunking.Implementations.LegalDocumentChunkStrategy>();
-builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkStrategyFactory, SIAP.Api.Services.Chunking.Implementations.ChunkStrategyFactory>();
-builder.Services.AddScoped<SIAP.Api.Services.Chunking.Interfaces.IChunkService, SIAP.Api.Services.Chunking.Implementations.ChunkService>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Chunking.Interfaces.IChunkStrategy, SIPENTA.Api.Services.Chunking.Implementations.ParagraphChunkStrategy>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Chunking.Interfaces.IChunkStrategy, SIPENTA.Api.Services.Chunking.Implementations.HeadingChunkStrategy>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Chunking.Interfaces.IChunkStrategy, SIPENTA.Api.Services.Chunking.Implementations.FixedLengthChunkStrategy>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Chunking.Interfaces.IChunkStrategy, SIPENTA.Api.Services.Chunking.Implementations.TokenChunkStrategy>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Chunking.Interfaces.IChunkStrategy, SIPENTA.Api.Services.Chunking.Implementations.LegalDocumentChunkStrategy>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Chunking.Interfaces.IChunkStrategyFactory, SIPENTA.Api.Services.Chunking.Implementations.ChunkStrategyFactory>();
+builder.Services.AddScoped<SIPENTA.Api.Services.Chunking.Interfaces.IChunkService, SIPENTA.Api.Services.Chunking.Implementations.ChunkService>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();

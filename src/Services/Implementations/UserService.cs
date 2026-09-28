@@ -1,9 +1,9 @@
-using SIAP.Api.DTOs;
-using SIAP.Api.Entities;
-using SIAP.Api.Repositories.Interfaces;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.DTOs;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Repositories.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class UserService : IUserService
 {

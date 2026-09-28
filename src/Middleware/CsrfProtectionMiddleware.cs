@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace SIAP.Api.Middleware;
+namespace SIPENTA.Api.Middleware;
 
 public class CsrfProtectionMiddleware
 {

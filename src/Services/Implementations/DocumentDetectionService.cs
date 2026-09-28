@@ -1,8 +1,8 @@
 using System.Text;
 using UglyToad.PdfPig;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class DocumentDetectionService : IDocumentDetectionService
 {

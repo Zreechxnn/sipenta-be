@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using SIAP.Api.Data;
-using SIAP.Api.Entities;
-using SIAP.Api.Repositories.Interfaces;
+using SIPENTA.Api.Data;
+using SIPENTA.Api.Entities;
+using SIPENTA.Api.Repositories.Interfaces;
 
-namespace SIAP.Api.Repositories.Implementations;
+namespace SIPENTA.Api.Repositories.Implementations;
 
 public class BidangRepository : IBidangRepository
 {

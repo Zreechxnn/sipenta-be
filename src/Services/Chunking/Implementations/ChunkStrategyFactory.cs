@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Options;
-using SIAP.Api.Configurations;
-using SIAP.Api.Services.Chunking.Interfaces;
+using SIPENTA.Api.Configurations;
+using SIPENTA.Api.Services.Chunking.Interfaces;
 
-namespace SIAP.Api.Services.Chunking.Implementations;
+namespace SIPENTA.Api.Services.Chunking.Implementations;
 
 public class ChunkStrategyFactory : IChunkStrategyFactory
 {

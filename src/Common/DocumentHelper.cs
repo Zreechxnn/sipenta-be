@@ -1,9 +1,9 @@
 using System;
 using System.Text;
 using System.Text.RegularExpressions;
-using SIAP.Api.Entities;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.Common;
+namespace SIPENTA.Api.Common;
 
 public static class DocumentHelper
 {

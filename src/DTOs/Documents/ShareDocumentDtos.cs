@@ -1,4 +1,4 @@
-namespace SIAP.Api.DTOs.Documents;
+namespace SIPENTA.Api.DTOs.Documents;
 
 public class ShareDocumentRequest
 {

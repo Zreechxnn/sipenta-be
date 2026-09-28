@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using SIAP.Api.Entities;
+using SIPENTA.Api.Entities;
 
-namespace SIAP.Api.Data;
+namespace SIPENTA.Api.Data;
 
 public class AppDbContext : DbContext
 {
@@ -188,7 +188,7 @@ public class AppDbContext : DbContext
                 Id = adminId,
                 Username = "superadmin",
                 Email = "superadmin@example.com",
-                FullName = "Super Administrator SIAP",
+                FullName = "Super Administrator SIPENTA",
                 PasswordHash = "$2b$12$C0FnFmFwP8AhaBDKbwQOZ.tPOThfbDRIG2gRw8jwxCMZH2ev/Ruf6", 
                 RoleId = 2,
                 BidangId = 6,

@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using SIAP.Api.Data;
-using SIAP.Api.DTOs.Dashboard;
-using SIAP.Api.Services.Interfaces;
+using SIPENTA.Api.Data;
+using SIPENTA.Api.DTOs.Dashboard;
+using SIPENTA.Api.Services.Interfaces;
 
-namespace SIAP.Api.Services.Implementations;
+namespace SIPENTA.Api.Services.Implementations;
 
 public class DashboardService : IDashboardService
 {

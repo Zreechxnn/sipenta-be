@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace SIAP.Api.DTOs.Chat;
+namespace SIPENTA.Api.DTOs.Chat;
 
 public class ChatRequestDto
 {
