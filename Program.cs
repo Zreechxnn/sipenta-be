@@ -38,7 +38,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
     options.MultipartHeadersLengthLimit = int.MaxValue;
     options.ValueCountLimit = 5000;
 });
-
+ 
 builder.Services.Configure<ConnectionStrings>(builder.Configuration.GetSection("ConnectionStrings"));
 builder.Services.Configure<ChunkOptions>(builder.Configuration.GetSection("ChunkOptions"));
 builder.Services.Configure<OcrOptions>(builder.Configuration.GetSection("Ocr"));
@@ -280,7 +280,7 @@ using (var scope = app.Services.CreateScope())
     {
         Serilog.Log.Warning(ex, "Failed to run startup DB role migration or config encryption check");
     }
-}
+} 
 
 var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "Images");
 if (!Directory.Exists(uploadsDir))
@@ -337,4 +337,4 @@ app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
 app.MapHub<AppHub>("/hubs/data");
 
-app.Run();
+app.Run(); 

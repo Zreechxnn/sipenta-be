@@ -19,7 +19,7 @@ public class GlobalExceptionMiddleware
     {
         try
         {
-            await _next(context);
+            await _next(context); 
         }
         catch (Exception ex)
         {
