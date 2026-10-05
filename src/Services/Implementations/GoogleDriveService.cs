@@ -38,7 +38,8 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
     private readonly string _folderId;
     private readonly string? _imageFolderId;
     private readonly ILogger<GoogleDriveService> _logger;
-    private readonly ConcurrentDictionary<string, string> _subfolderCache = new();
+    private static readonly ConcurrentDictionary<string, string> _subfolderCache = new();
+    private static readonly SemaphoreSlim _folderLock = new(1, 1);
 
     public GoogleDriveService(IConfiguration config, ILogger<GoogleDriveService> logger)
     {
@@ -133,6 +134,12 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         return fileResult.Id;
     }
 
+    public async Task<string> EnsureSubfolderAsync(string subfolderName)
+    {
+        var baseFolder = !string.IsNullOrEmpty(_imageFolderId) ? _imageFolderId : _folderId;
+        return await GetOrCreateSubfolderAsync(baseFolder, subfolderName);
+    }
+
     public async Task<string> GetOrCreateSubfolderAsync(string parentFolderId, string folderName)
     {
         if (string.IsNullOrWhiteSpace(folderName)) return parentFolderId;
@@ -146,21 +153,67 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
             return cachedId;
         }
 
+        await _folderLock.WaitAsync();
         try
         {
+            if (_subfolderCache.TryGetValue(cacheKey, out cachedId))
+            {
+                return cachedId;
+            }
+
             var client = GetClient();
             var listRequest = client.Files.List();
             var escapedName = safeFolderName.Replace("'", "\\'");
             listRequest.Q = $"mimeType = 'application/vnd.google-apps.folder' and name = '{escapedName}' and '{parentFolderId}' in parents and trashed = false";
             listRequest.Fields = "files(id, name)";
-            listRequest.PageSize = 1;
+            listRequest.PageSize = 20;
 
             var listResult = await listRequest.ExecuteAsync();
-            var existingFolder = listResult.Files?.FirstOrDefault();
-            if (existingFolder != null && !string.IsNullOrEmpty(existingFolder.Id))
+            var existingFolders = listResult.Files;
+            if (existingFolders != null && existingFolders.Count > 0)
             {
-                _subfolderCache[cacheKey] = existingFolder.Id;
-                return existingFolder.Id;
+                var primaryFolder = existingFolders[0];
+                _subfolderCache[cacheKey] = primaryFolder.Id;
+
+                // Jika sebelumnya ada duplikasi folder bernama sama (seperti akibat race condition), gabungkan & bersihkan
+                if (existingFolders.Count > 1)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            for (int i = 1; i < existingFolders.Count; i++)
+                            {
+                                var dupFolder = existingFolders[i];
+                                var fileListReq = client.Files.List();
+                                fileListReq.Q = $"'{dupFolder.Id}' in parents and trashed = false";
+                                fileListReq.Fields = "files(id, name)";
+                                var dupFiles = await fileListReq.ExecuteAsync();
+
+                                if (dupFiles.Files != null)
+                                {
+                                    foreach (var f in dupFiles.Files)
+                                    {
+                                        var updateReq = client.Files.Update(new Google.Apis.Drive.v3.Data.File(), f.Id);
+                                        updateReq.AddParents = primaryFolder.Id;
+                                        updateReq.RemoveParents = dupFolder.Id;
+                                        updateReq.Fields = "id, parents";
+                                        await updateReq.ExecuteAsync();
+                                    }
+                                }
+
+                                await client.Files.Delete(dupFolder.Id).ExecuteAsync();
+                                _logger.LogInformation("Berhasil menggabungkan dan merapikan folder duplikat '{FolderName}' ({FolderId}) ke folder utama ({PrimaryId})", safeFolderName, dupFolder.Id, primaryFolder.Id);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Pembersihan folder duplikat di Google Drive untuk '{FolderName}' mengalami kendala.", safeFolderName);
+                        }
+                    });
+                }
+
+                return primaryFolder.Id;
             }
 
             var folderMetadata = new Google.Apis.Drive.v3.Data.File
@@ -175,13 +228,17 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
             var createdFolder = await createRequest.ExecuteAsync();
 
             _subfolderCache[cacheKey] = createdFolder.Id;
-            _logger.LogInformation("Berhasil membuat subfolder '{FolderName}' ({FolderId}) di Google Drive dalam parent {ParentId}", safeFolderName, createdFolder.Id, parentFolderId);
+            _logger.LogInformation("Berhasil membuat 1 subfolder tunggal '{FolderName}' ({FolderId}) di Google Drive dalam parent {ParentId}", safeFolderName, createdFolder.Id, parentFolderId);
             return createdFolder.Id;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Gagal mendapatkan atau membuat subfolder '{FolderName}' di Google Drive. Menggunakan parent folder default.", safeFolderName);
             return parentFolderId;
+        }
+        finally
+        {
+            _folderLock.Release();
         }
     }
 
@@ -192,7 +249,14 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 
         if (!string.IsNullOrWhiteSpace(folderOrPrefix))
         {
-            targetFolder = await GetOrCreateSubfolderAsync(baseFolder, folderOrPrefix);
+            if (_subfolderCache.Values.Contains(folderOrPrefix) || folderOrPrefix == baseFolder)
+            {
+                targetFolder = folderOrPrefix;
+            }
+            else
+            {
+                targetFolder = await GetOrCreateSubfolderAsync(baseFolder, folderOrPrefix);
+            }
         }
                           
         var fileMetadata = new Google.Apis.Drive.v3.Data.File()

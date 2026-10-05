@@ -613,12 +613,15 @@ public class DocumentService : IDocumentService
                 ? document.Nama.Trim() 
                 : Path.GetFileNameWithoutExtension(document.NamaFile ?? "Dokumen");
 
+            // Pastikan 1 subfolder tunggal dibuat/diambil 1 KALI saja sebelum upload gambar
+            var targetFolder = await _driveService.EnsureSubfolderAsync(docSubfolder);
+
             int imgIndex = 1;
             foreach (var img in extractedImages)
             {
                 var imgFileName = $"p{img.PageNumber}_{imgIndex}_{Guid.NewGuid():N}.{img.Extension}";
                 
-                var driveFileId = await _driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType, docSubfolder);
+                var driveFileId = await _driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType, targetFolder);
                 var driveUrl = $"/api/Documents/images/{driveFileId}";
 
                 var docImage = new DocumentImage

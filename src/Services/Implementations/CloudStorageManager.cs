@@ -179,6 +179,12 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
         return await provider.UploadFileBytesAsync(fileBytes, fileName, contentType, folderOrPrefix);
     }
 
+    public async Task<string> EnsureSubfolderAsync(string subfolderName)
+    {
+        var provider = await GetActiveProviderAsync();
+        return await provider.EnsureSubfolderAsync(subfolderName);
+    }
+
     public async Task DeleteFileAsync(string fileIdOrPath)
     {
         var provider = await ResolveProviderForResourceAsync(fileIdOrPath);

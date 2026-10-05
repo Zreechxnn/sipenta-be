@@ -56,6 +56,22 @@ public class LocalStorageProvider : ICloudStorageService
         return $"local:{_documentFolder}/{uniqueName}";
     }
 
+    public Task<string> EnsureSubfolderAsync(string subfolderName)
+    {
+        var cleanPrefix = subfolderName.Trim().Trim('/', '\\');
+        var invalidChars = Path.GetInvalidFileNameChars();
+        cleanPrefix = string.Join("_", cleanPrefix.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+
+        var subFolder = cleanPrefix.StartsWith(_imageFolder, StringComparison.OrdinalIgnoreCase)
+            ? cleanPrefix
+            : Path.Combine(_imageFolder, cleanPrefix);
+
+        var targetDir = Path.Combine(_basePath, subFolder);
+        EnsureDirectoryExists(targetDir);
+
+        return Task.FromResult(subFolder.Replace('\\', '/'));
+    }
+
     public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string? folderOrPrefix = null)
     {
         var sanitized = Path.GetFileName(fileName);
