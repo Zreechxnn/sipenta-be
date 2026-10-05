@@ -849,7 +849,7 @@ PANDUAN:
         }
     }
 
-    [HttpGet("images/{fileId}")]
+    [HttpGet("images/{*fileId}")]
     public async Task<IActionResult> GetImage(string fileId, [FromServices] IGoogleDriveService driveService)
     {
         try

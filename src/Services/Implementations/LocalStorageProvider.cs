@@ -60,15 +60,32 @@ public class LocalStorageProvider : ICloudStorageService
     {
         var sanitized = Path.GetFileName(fileName);
         var uniqueName = $"{Guid.NewGuid():N}_{sanitized}";
-        var subFolder = !string.IsNullOrWhiteSpace(folderOrPrefix) ? folderOrPrefix : _imageFolder;
+
+        string subFolder;
+        if (!string.IsNullOrWhiteSpace(folderOrPrefix))
+        {
+            var cleanPrefix = folderOrPrefix.Trim().Trim('/', '\\');
+            var invalidChars = Path.GetInvalidFileNameChars();
+            cleanPrefix = string.Join("_", cleanPrefix.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+
+            subFolder = cleanPrefix.StartsWith(_imageFolder, StringComparison.OrdinalIgnoreCase)
+                ? cleanPrefix
+                : Path.Combine(_imageFolder, cleanPrefix);
+        }
+        else
+        {
+            subFolder = _imageFolder;
+        }
+
         var targetDir = Path.Combine(_basePath, subFolder);
         EnsureDirectoryExists(targetDir);
         var targetPath = Path.Combine(targetDir, uniqueName);
 
         await File.WriteAllBytesAsync(targetPath, fileBytes);
 
-        _logger.LogInformation("Bytes saved to LocalStorage: {SubFolder}/{UniqueName}", subFolder, uniqueName);
-        return $"local:{subFolder}/{uniqueName}";
+        var normalizedSubFolder = subFolder.Replace('\\', '/');
+        _logger.LogInformation("Bytes saved to LocalStorage: {SubFolder}/{UniqueName}", normalizedSubFolder, uniqueName);
+        return $"local:{normalizedSubFolder}/{uniqueName}";
     }
 
     public Task DeleteFileAsync(string fileIdOrPath)

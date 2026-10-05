@@ -156,7 +156,18 @@ public class WebDavStorageProvider : ICloudStorageService
     {
         var sanitized = Path.GetFileName(fileName);
         var uniqueName = $"{Guid.NewGuid():N}_{sanitized}";
-        var prefix = !string.IsNullOrWhiteSpace(folderOrPrefix) ? folderOrPrefix.Trim('/') : _imagePath;
+        string prefix;
+        if (!string.IsNullOrWhiteSpace(folderOrPrefix))
+        {
+            var clean = folderOrPrefix.Trim().Trim('/');
+            prefix = clean.StartsWith(_imagePath, StringComparison.OrdinalIgnoreCase)
+                ? clean
+                : $"{_imagePath}/{clean}";
+        }
+        else
+        {
+            prefix = _imagePath;
+        }
         var subDir = string.IsNullOrWhiteSpace(_remotePath) ? prefix : $"{_remotePath}/{prefix}";
 
         await EnsureRemoteDirectoryExistsAsync(subDir);

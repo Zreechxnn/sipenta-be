@@ -143,7 +143,18 @@ public class SupabaseStorageProvider : ICloudStorageService
         await EnsureBucketExistsAsync();
 
         var sanitized = Path.GetFileName(fileName);
-        var prefix = !string.IsNullOrWhiteSpace(folderOrPrefix) ? folderOrPrefix.Trim('/') : _imagePrefix;
+        string prefix;
+        if (!string.IsNullOrWhiteSpace(folderOrPrefix))
+        {
+            var clean = folderOrPrefix.Trim().Trim('/');
+            prefix = clean.StartsWith(_imagePrefix, StringComparison.OrdinalIgnoreCase)
+                ? clean
+                : $"{_imagePrefix}/{clean}";
+        }
+        else
+        {
+            prefix = _imagePrefix;
+        }
         var objectKey = $"{prefix}/{Guid.NewGuid():N}_{sanitized}".TrimStart('/');
         var uploadUrl = $"{_baseStorageUrl}/object/{_bucket}/{objectKey}";
 
