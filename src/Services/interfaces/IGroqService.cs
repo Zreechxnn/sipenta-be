@@ -7,5 +7,5 @@ public interface IGroqService
     Task<bool> IsLlmConfiguredAndActiveAsync();
     Task<string> GetChatCompletionAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default);
     Task<string> GetChatCompletionWithHistoryAsync(string systemPrompt, IEnumerable<object> messages, CancellationToken cancellationToken = default);
-    Task<string> GetChatCompletionWithVisionAsync(string systemPrompt, IEnumerable<object> historyMessages, string userMessage, IEnumerable<LlmImageInput>? images, CancellationToken cancellationToken = default);
+    Task<string> GetChatCompletionWithVisionAsync(string systemPrompt, IEnumerable<object> historyMessages, string userMessage, IEnumerable<LlmImageInput>? images, bool forceVisionModel = false, CancellationToken cancellationToken = default);
 }

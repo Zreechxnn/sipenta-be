@@ -14,9 +14,12 @@ public class UserRepository : IUserRepository
         _context = context;
     }
 
-    public async Task<User?> GetByIdAsync(Guid id)
+    public async Task<User?> GetByIdAsync(Guid id, bool asNoTracking = false)
     {
-        return await _context.Users
+        var query = _context.Users.AsQueryable();
+        if (asNoTracking) query = query.AsNoTracking();
+
+        return await query
             .Include(u => u.Role)
             .Include(u => u.Bidang)
             .FirstOrDefaultAsync(u => u.Id == id);
@@ -25,6 +28,7 @@ public class UserRepository : IUserRepository
     public async Task<User?> GetByUsernameAsync(string username)
     {
         return await _context.Users
+            .AsNoTracking()
             .Include(u => u.Role)
             .Include(u => u.Bidang)
             .FirstOrDefaultAsync(u => u.Username == username);
@@ -33,6 +37,7 @@ public class UserRepository : IUserRepository
     public async Task<User?> GetByEmailAsync(string email)
     {
         return await _context.Users
+            .AsNoTracking()
             .Include(u => u.Role)
             .Include(u => u.Bidang)
             .FirstOrDefaultAsync(u => u.Email == email);
@@ -41,11 +46,13 @@ public class UserRepository : IUserRepository
     public async Task<IEnumerable<User>> GetAllAsync()
     {
         return await _context.Users
+            .AsNoTracking()
             .Include(u => u.Role)
             .Include(u => u.Bidang)
             .OrderByDescending(u => u.CreatedAt)
             .ToListAsync();
     }
+
 
     public async Task AddAsync(User user)
     {
@@ -72,6 +79,7 @@ public class UserRepository : IUserRepository
             return new List<User>();
 
         return await _context.Users
+            .AsNoTracking()
             .Include(u => u.Role)
             .Include(u => u.Bidang)
             .Where(u => u.Username.Contains(query) || (u.FullName != null && u.FullName.Contains(query)))
@@ -79,4 +87,5 @@ public class UserRepository : IUserRepository
             .Take(20)
             .ToListAsync();
     }
+
 }

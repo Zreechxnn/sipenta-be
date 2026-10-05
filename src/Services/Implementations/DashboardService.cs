@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SIPENTA.Api.Data;
 using SIPENTA.Api.DTOs.Dashboard;
 using SIPENTA.Api.Services.Interfaces;
@@ -8,30 +9,38 @@ namespace SIPENTA.Api.Services.Implementations;
 public class DashboardService : IDashboardService
 {
     private readonly AppDbContext _context;
+    private readonly IMemoryCache? _cache;
 
-    public DashboardService(AppDbContext context)
+    public DashboardService(AppDbContext context, IMemoryCache? cache = null)
     {
         _context = context;
+        _cache = cache;
     }
 
     public async Task<DashboardSummaryDto> GetSummaryAsync(Guid? userId = null, int? userBidangId = null, bool isAdmin = false)
     {
+        var cacheKey = $"dashboard_summary_{isAdmin}_{userId}_{userBidangId}";
+        if (_cache != null && _cache.TryGetValue(cacheKey, out DashboardSummaryDto? cached) && cached != null)
+        {
+            return cached;
+        }
+
         int totalUsers;
         int pendingUsers;
 
         if (isAdmin)
         {
-            totalUsers = await _context.Users.CountAsync();
-            pendingUsers = await _context.Users.CountAsync(u => !u.IsApproved);
+            totalUsers = await _context.Users.AsNoTracking().CountAsync();
+            pendingUsers = await _context.Users.AsNoTracking().CountAsync(u => !u.IsApproved);
         }
         else
         {
             // For Kepala Bidang (Admin Bidang) / Bidang-scoped roles:
-            totalUsers = await _context.Users.CountAsync(u => u.BidangId == userBidangId);
-            pendingUsers = await _context.Users.CountAsync(u => !u.IsApproved && (u.BidangId == null || u.BidangId == userBidangId));
+            totalUsers = await _context.Users.AsNoTracking().CountAsync(u => u.BidangId == userBidangId);
+            pendingUsers = await _context.Users.AsNoTracking().CountAsync(u => !u.IsApproved && (u.BidangId == null || u.BidangId == userBidangId));
         }
         
-        var documentsQuery = _context.Documents.AsQueryable();
+        var documentsQuery = _context.Documents.AsNoTracking().AsQueryable();
 
         // If not admin, restrict to owner documents, same Bidang documents, or explicitly shared documents
         if (!isAdmin && userId.HasValue)
@@ -44,10 +53,9 @@ public class DashboardService : IDashboardService
         }
 
         var totalDocuments = await documentsQuery.CountAsync();
-        var totalStorage = totalDocuments > 0 ? (await documentsQuery.Select(d => (long?)d.Ukuran).SumAsync() ?? 0) : 0;
+        var totalStorage = await documentsQuery.Select(d => (long?)d.Ukuran).SumAsync() ?? 0;
 
         var docsByBidang = await documentsQuery
-            .Include(d => d.Bidang)
             .GroupBy(d => d.Bidang != null ? d.Bidang.Nama : "Tanpa Bidang")
             .Select(g => new DocumentsByBidangDto
             {
@@ -57,7 +65,6 @@ public class DashboardService : IDashboardService
             .ToListAsync();
 
         var recentDocs = await documentsQuery
-            .Include(d => d.User)
             .OrderByDescending(d => d.TanggalUpload)
             .Take(5)
             .Select(d => new RecentDocumentDto
@@ -69,7 +76,7 @@ public class DashboardService : IDashboardService
             })
             .ToListAsync();
 
-        return new DashboardSummaryDto
+        var summary = new DashboardSummaryDto
         {
             TotalUsers = totalUsers,
             PendingUsers = pendingUsers,
@@ -78,5 +85,10 @@ public class DashboardService : IDashboardService
             DocumentsByBidang = docsByBidang,
             RecentDocuments = recentDocs
         };
+
+        _cache?.Set(cacheKey, summary, TimeSpan.FromSeconds(20));
+
+        return summary;
     }
 }
+

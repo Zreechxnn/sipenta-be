@@ -48,13 +48,14 @@ public class DocumentsController : ControllerBase
             return (null, null, null, isAdmin, false);
         }
 
-        var dbUser = await _userRepository.GetByIdAsync(userId);
+        var dbUser = await _userRepository.GetByIdAsync(userId, asNoTracking: true);
         var isApproved = dbUser?.IsApproved ?? false;
         var userBidangId = dbUser?.BidangId;
         var userBidang = dbUser?.Bidang?.Nama;
 
         return (userId, userBidangId, userBidang, isAdmin, isApproved);
     }
+
 
     [HttpPost]
     [Authorize(Roles = "admin,user,kepala bidang")]

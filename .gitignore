@@ -37,6 +37,7 @@ app.db-wal
 # App specific / Scratch files
 Uploads/
 graphify-out/
+docs/
 next.md
 ok.md
 y.md
@@ -45,4 +46,4 @@ test_chunk.csx
 
 test.pdf
 login.json
-be.md
+be.md

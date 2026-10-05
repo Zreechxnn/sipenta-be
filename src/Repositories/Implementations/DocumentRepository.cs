@@ -15,9 +15,12 @@ public class DocumentRepository : IDocumentRepository
         _context = context;
     }
 
-    public async Task<Document?> GetByIdAsync(Guid id)
+    public async Task<Document?> GetByIdAsync(Guid id, bool asNoTracking = false)
     {
-        return await _context.Set<Document>()
+        var query = _context.Set<Document>().AsQueryable();
+        if (asNoTracking) query = query.AsNoTracking();
+
+        return await query
             .Include(x => x.Content)
             .Include(x => x.User)
             .Include(x => x.Bidang)
@@ -41,20 +44,13 @@ public class DocumentRepository : IDocumentRepository
         int? filterBidangId = null,
         string? filterBidang = null)
     {
-        var query = _context.Set<Document>()
-            .Include(x => x.Content)
-            .Include(x => x.User)
-            .Include(x => x.Bidang)
-            .Include(x => x.Accesses)
-                .ThenInclude(a => a.User)
-                    .ThenInclude(u => u.Bidang)
-            .AsQueryable();
+        var baseQuery = _context.Set<Document>().AsNoTracking().AsQueryable();
 
         // If not admin, restrict to owner documents, same Bidang documents, or explicitly shared documents
         if (!isAdmin && userId.HasValue)
         {
             var uId = userId.Value;
-            query = query.Where(x => 
+            baseQuery = baseQuery.Where(x => 
                 x.UserId == uId || 
                 (userBidangId.HasValue && (x.BidangId == userBidangId.Value || (x.BidangId == null && x.User != null && x.User.BidangId == userBidangId.Value))) || 
                 x.Accesses.Any(a => a.UserId == uId));
@@ -63,17 +59,17 @@ public class DocumentRepository : IDocumentRepository
         // Filter by Bidang if specified
         if (filterBidangId.HasValue && filterBidangId.Value > 0)
         {
-            query = query.Where(x => x.BidangId == filterBidangId.Value);
+            baseQuery = baseQuery.Where(x => x.BidangId == filterBidangId.Value);
         }
         else if (!string.IsNullOrWhiteSpace(filterBidang))
         {
-            query = query.Where(x => x.Bidang != null && (x.Bidang.Nama == filterBidang || x.Bidang.Kode == filterBidang));
+            baseQuery = baseQuery.Where(x => x.Bidang != null && (x.Bidang.Nama == filterBidang || x.Bidang.Kode == filterBidang));
         }
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
             var searchPattern = $"%{keyword}%";
-            query = query.Where(x => 
+            baseQuery = baseQuery.Where(x => 
                 EF.Functions.ILike(x.Nama!, searchPattern) || 
                 EF.Functions.ILike(x.NamaTenagaAhli!, searchPattern) ||
                 (x.Content != null && EF.Functions.ILike(x.Content.RawText, searchPattern)));
@@ -82,26 +78,33 @@ public class DocumentRepository : IDocumentRepository
         if (!string.IsNullOrWhiteSpace(namaTenagaAhli))
         {
             var namaPattern = $"%{namaTenagaAhli}%";
-            query = query.Where(x => x.NamaTenagaAhli != null && EF.Functions.ILike(x.NamaTenagaAhli, namaPattern));
+            baseQuery = baseQuery.Where(x => x.NamaTenagaAhli != null && EF.Functions.ILike(x.NamaTenagaAhli, namaPattern));
         }
 
         if (!string.IsNullOrWhiteSpace(jenisDokumen))
         {
             var jenisPattern = $"%{jenisDokumen}%";
-            query = query.Where(x => x.JenisDokumen != null && EF.Functions.ILike(x.JenisDokumen, jenisPattern));
+            baseQuery = baseQuery.Where(x => x.JenisDokumen != null && EF.Functions.ILike(x.JenisDokumen, jenisPattern));
         }
 
         if (!string.IsNullOrWhiteSpace(periodeLaporan))
         {
             var periodePattern = $"%{periodeLaporan}%";
-            query = query.Where(x => x.PeriodeLaporan != null && EF.Functions.ILike(x.PeriodeLaporan, periodePattern));
+            baseQuery = baseQuery.Where(x => x.PeriodeLaporan != null && EF.Functions.ILike(x.PeriodeLaporan, periodePattern));
         }
 
-        var total = await query.CountAsync();
-        var data = await query.OrderByDescending(x => x.TanggalUpload)
-                              .Skip((pageNumber - 1) * pageSize)
-                              .Take(pageSize)
-                              .ToListAsync();
+        var total = await baseQuery.CountAsync();
+        var data = await baseQuery
+            .Include(x => x.Content)
+            .Include(x => x.User)
+            .Include(x => x.Bidang)
+            .Include(x => x.Accesses)
+                .ThenInclude(a => a.User)
+                    .ThenInclude(u => u.Bidang)
+            .OrderByDescending(x => x.TanggalUpload)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
 
         return (data, total);
     }
@@ -111,8 +114,7 @@ public class DocumentRepository : IDocumentRepository
         if (isAdmin) return true;
 
         return await _context.Documents
-            .Include(d => d.User)
-            .Include(d => d.Accesses)
+            .AsNoTracking()
             .AnyAsync(d => 
                 d.Id == documentId && (
                     d.UserId == userId || 
@@ -124,6 +126,7 @@ public class DocumentRepository : IDocumentRepository
     public async Task<List<DocumentAccess>> GetDocumentAccessesAsync(Guid documentId)
     {
         return await _context.DocumentAccesses
+            .AsNoTracking()
             .Include(da => da.User)
                 .ThenInclude(u => u.Bidang)
             .Include(da => da.SharedByUser)
@@ -133,6 +136,7 @@ public class DocumentRepository : IDocumentRepository
     }
 
     public async Task<DocumentAccess?> GetDocumentAccessAsync(Guid documentId, Guid userId)
+
     {
         return await _context.DocumentAccesses
             .Include(da => da.User)
@@ -198,6 +202,7 @@ public class DocumentRepository : IDocumentRepository
     public async Task<List<DocumentChunk>> GetChunksByDocumentIdAsync(Guid documentId)
     {
         return await _context.Set<DocumentChunk>()
+            .AsNoTracking()
             .Where(x => x.DocumentId == documentId)
             .OrderBy(x => x.ChunkIndex)
             .ToListAsync();
@@ -211,19 +216,12 @@ public class DocumentRepository : IDocumentRepository
         int? userBidangId = null,
         bool isAdmin = false)
     {
-        var query = _context.DocumentChunks
-            .Include(c => c.Document)
-                .ThenInclude(d => d!.Bidang)
-            .Include(c => c.Document)
-                .ThenInclude(d => d!.User)
-            .Include(c => c.Document)
-                .ThenInclude(d => d!.Accesses)
-            .AsQueryable();
+        var baseQuery = _context.DocumentChunks.AsNoTracking().AsQueryable();
 
         if (!isAdmin && userId.HasValue)
         {
             var uId = userId.Value;
-            query = query.Where(c => 
+            baseQuery = baseQuery.Where(c => 
                 c.Document != null && (
                     c.Document.UserId == uId || 
                     (userBidangId.HasValue && (c.Document.BidangId == userBidangId.Value || (c.Document.BidangId == null && c.Document.User != null && c.Document.User.BidangId == userBidangId.Value))) || 
@@ -233,13 +231,19 @@ public class DocumentRepository : IDocumentRepository
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
-            query = query.Where(c => EF.Functions.ToTsVector("indonesian", c.Content)
+            baseQuery = baseQuery.Where(c => EF.Functions.ToTsVector("indonesian", c.Content)
                         .Matches(EF.Functions.WebSearchToTsQuery("indonesian", keyword)));
         }
 
-        var totalCount = await query.CountAsync();
+        var totalCount = await baseQuery.CountAsync();
         
-        var items = await query
+        var items = await baseQuery
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.Bidang)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.User)
+            .Include(c => c.Document)
+                .ThenInclude(d => d!.Accesses)
             .OrderByDescending(c => c.CreatedAt)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
@@ -251,6 +255,7 @@ public class DocumentRepository : IDocumentRepository
     public async Task<DocumentChunk?> GetChunkByIdAsync(Guid documentId, Guid chunkId)
     {
         return await _context.Set<DocumentChunk>()
+            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.DocumentId == documentId && x.Id == chunkId);
     }
 
@@ -299,6 +304,7 @@ public class DocumentRepository : IDocumentRepository
         var tsQueryStringOr = string.Join(" | ", words);
 
         var query = _context.DocumentChunks
+            .AsNoTracking()
             .Include(c => c.Document)
                 .ThenInclude(d => d!.Bidang)
             .Include(c => c.Document)
@@ -347,6 +353,7 @@ public class DocumentRepository : IDocumentRepository
         int fetchCount = topK * 3;
 
         var query = _context.DocumentChunks
+            .AsNoTracking()
             .Include(c => c.Document)
                 .ThenInclude(d => d!.Bidang)
             .Include(c => c.Document)
@@ -410,8 +417,8 @@ public class DocumentRepository : IDocumentRepository
             "januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"
         };
 
-        var queryMonths = words.Where(w => indonesianMonths.Contains(w)).ToList();
-        var queryNumbers = words.Where(w => w.All(char.IsDigit) && w.Length <= 2).ToList();
+        var queryMonths = words.Where(w => indonesianMonths.Contains(w)).Take(2).ToList();
+        var queryNumbers = words.Where(w => w.All(char.IsDigit) && w.Length <= 2).Take(2).ToList();
 
         if (queryNumbers.Any() && queryMonths.Any())
         {
@@ -431,8 +438,8 @@ public class DocumentRepository : IDocumentRepository
             }
         }
 
-        // Only search non-numeric keywords (or numbers with length >= 4 like years) for exact substring matches
-        foreach (var word in words.Where(w => (w.Length >= 3 && !w.All(char.IsDigit)) || (w.All(char.IsDigit) && w.Length == 4)))
+        // Only search non-numeric keywords (or numbers with length >= 4 like years) for exact substring matches (up to 3 keywords)
+        foreach (var word in words.Where(w => (w.Length >= 3 && !w.All(char.IsDigit)) || (w.All(char.IsDigit) && w.Length == 4)).Take(3))
         {
             var pattern = $"%{word}%";
             var match = await query
@@ -443,6 +450,7 @@ public class DocumentRepository : IDocumentRepository
                 .ToListAsync();
             exactMatches.AddRange(match);
         }
+
 
         // 4. Reciprocal Rank Fusion (RRF)
         var rrfScores = new Dictionary<Guid, double>();

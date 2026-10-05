@@ -4,7 +4,7 @@ namespace SIPENTA.Api.Repositories.Interfaces;
 
 public interface IUserRepository
 {
-    Task<User?> GetByIdAsync(Guid id);
+    Task<User?> GetByIdAsync(Guid id, bool asNoTracking = false);
     Task<User?> GetByUsernameAsync(string username);
     Task<User?> GetByEmailAsync(string email);
     Task<IEnumerable<User>> GetAllAsync();
@@ -13,3 +13,4 @@ public interface IUserRepository
     Task DeleteAsync(User user);
     Task<IEnumerable<User>> SearchAsync(string query);
 }
+
