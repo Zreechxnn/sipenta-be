@@ -261,7 +261,12 @@ PANDUAN:
 
                 var userRewritePrompt = $"Riwayat:\n{historyText}\n\nuser: {request.Message}\nKata Kunci:";
                 var rewritten = await _groqService.GetChatCompletionAsync(rewritePrompt, userRewritePrompt);
-                if (!string.IsNullOrWhiteSpace(rewritten) && rewritten.Length <= 150)
+                if (!string.IsNullOrWhiteSpace(rewritten) && 
+                    rewritten.Length <= 150 &&
+                    !rewritten.StartsWith("Mohon maaf", StringComparison.OrdinalIgnoreCase) &&
+                    !rewritten.StartsWith("Terjadi kesalahan", StringComparison.OrdinalIgnoreCase) &&
+                    !rewritten.StartsWith("Layanan asisten AI", StringComparison.OrdinalIgnoreCase) &&
+                    !rewritten.StartsWith("Llm API Key is not", StringComparison.OrdinalIgnoreCase))
                 {
                     searchQuery = rewritten.Trim();
                 }
@@ -739,10 +744,13 @@ KONTEKS DOKUMEN:
             };
             _dbContext.ChatMessages.Add(userMsg);
 
+            // If user explicitly chose Text mode, do not pass images so that text model is forced
+            var isTextModeExplicit = string.Equals(request.ModelMode, "text", StringComparison.OrdinalIgnoreCase);
+            
             // Pass up to 2 vision images by default to maintain multi-image awareness (e.g. Gambar #1 & Gambar #2),
             // or up to 3 if requested image index refers to a 3rd image
-            var finalVisionImages = visionImages.Take(2).ToList();
-            if (requestedImageIndex.HasValue && requestedImageIndex.Value >= 2 && requestedImageIndex.Value < visionImages.Count)
+            var finalVisionImages = isTextModeExplicit ? new List<LlmImageInput>() : visionImages.Take(2).ToList();
+            if (!isTextModeExplicit && requestedImageIndex.HasValue && requestedImageIndex.Value >= 2 && requestedImageIndex.Value < visionImages.Count)
             {
                 finalVisionImages = visionImages.Take(requestedImageIndex.Value + 1).ToList();
             }
@@ -759,8 +767,13 @@ KONTEKS DOKUMEN:
                     "/api/Documents/images/$1"
                 );
 
+                var isErrorMessage = answer.StartsWith("Mohon maaf,", StringComparison.OrdinalIgnoreCase) ||
+                                     answer.StartsWith("Terjadi kesalahan", StringComparison.OrdinalIgnoreCase) ||
+                                     answer.StartsWith("Llm API Key is not", StringComparison.OrdinalIgnoreCase) ||
+                                     answer.StartsWith("Layanan asisten AI", StringComparison.OrdinalIgnoreCase);
+
                 // If this was an activity inquiry (not an image follow-up) and LLM forgot to include image markdown, append relevant images
-                if (!isImageFollowUp && (!isExplicitDateQuery || dateHasRecordedActivity) && relevantImages.Any() && !answer.Contains("![") && !answer.Contains("/api/Documents/images/"))
+                if (!isErrorMessage && !isImageFollowUp && (!isExplicitDateQuery || dateHasRecordedActivity) && relevantImages.Any() && !answer.Contains("![") && !answer.Contains("/api/Documents/images/"))
                 {
                     var imageMarkdown = new System.Text.StringBuilder("\n\n**Dokumentasi Kegiatan:**\n");
                     foreach (var rImg in relevantImages.Take(2))

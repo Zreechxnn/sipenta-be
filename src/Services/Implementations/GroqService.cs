@@ -275,9 +275,10 @@ public class GroqService : IGroqService
                     "application/json"
                 );
 
-                // Per-endpoint timeout: 30 seconds to prevent hanging on exhausted/slow endpoints
+                // Per-endpoint timeout: 60s for vision, 45s for text to prevent hanging on exhausted/slow endpoints
+                var timeoutSeconds = isVision ? 60 : 45;
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                linkedCts.CancelAfter(TimeSpan.FromSeconds(30));
+                linkedCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
                 using var response = await _httpClient.SendAsync(request, linkedCts.Token);
 
@@ -337,8 +338,9 @@ public class GroqService : IGroqService
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                var errorMsg = $"[{config.Name}] Request timed out after 30s.";
-                _logger?.LogWarning("LLM Request to {Name} ({Url} - {Model}) timed out after 30s. Attempting fallback to next config...", config.Name, config.BaseUrl, selectedModel);
+                var timeoutSeconds = isVision ? 60 : 45;
+                var errorMsg = $"[{config.Name}] Request timed out after {timeoutSeconds}s.";
+                _logger?.LogWarning("LLM Request to {Name} ({Url} - {Model}) timed out after {TimeoutSeconds}s. Attempting fallback to next config...", config.Name, config.BaseUrl, selectedModel, timeoutSeconds);
                 errors.Add(errorMsg);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
