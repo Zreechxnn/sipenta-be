@@ -563,8 +563,8 @@ public class SystemConfigService : ISystemConfigService
             GoogleDrive = new GoogleDriveSettingsDto
             {
                 TokenJson = !string.IsNullOrWhiteSpace(config.GoogleDrive?.TokenJson) ? config.GoogleDrive.TokenJson : (existingConfig.GoogleDrive?.TokenJson ?? string.Empty),
-                FolderId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.FolderId) ? config.GoogleDrive.FolderId : (existingConfig.GoogleDrive?.FolderId ?? string.Empty),
-                FolderImageId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.FolderImageId) ? config.GoogleDrive.FolderImageId : (existingConfig.GoogleDrive?.FolderImageId ?? string.Empty),
+                FolderId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.FolderId) ? config.GoogleDrive.FolderId.Trim() : (existingConfig.GoogleDrive?.FolderId ?? string.Empty),
+                FolderImageId = config.GoogleDrive?.FolderImageId != null ? config.GoogleDrive.FolderImageId.Trim() : (existingConfig.GoogleDrive?.FolderImageId ?? string.Empty),
                 ClientId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.ClientId) ? config.GoogleDrive.ClientId : (existingConfig.GoogleDrive?.ClientId ?? string.Empty),
                 ClientSecret = !string.IsNullOrWhiteSpace(config.GoogleDrive?.ClientSecret) ? config.GoogleDrive.ClientSecret : (existingConfig.GoogleDrive?.ClientSecret ?? string.Empty)
             },
@@ -683,6 +683,7 @@ public class SystemConfigService : ISystemConfigService
 
         await _dbContext.SaveChangesAsync();
         _cache.Remove(StorageCacheKey);
+        GoogleDriveService.ClearCache();
     }
 
     public async Task<StorageTestResponseDto> TestStorageAsync(StorageConfigDto? testConfig = null)
@@ -806,7 +807,18 @@ public class SystemConfigService : ISystemConfigService
             else
             {
                 // Google Drive
-                var token = config.GoogleDrive?.TokenJson ?? _configuration["GoogleDrive:TokenJson"] ?? _configuration["GoogleDrive__TokenJson"];
+                var token = !string.IsNullOrWhiteSpace(config.GoogleDrive?.TokenJson)
+                    ? config.GoogleDrive.TokenJson
+                    : (_configuration["GoogleDrive:TokenJson"] ?? _configuration["GoogleDrive__TokenJson"]);
+
+                var folderId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.FolderId)
+                    ? config.GoogleDrive.FolderId
+                    : (_configuration["GoogleDrive:FolderId"] ?? _configuration["GoogleDrive__FolderId"] ?? "");
+
+                var imageFolderId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.FolderImageId)
+                    ? config.GoogleDrive.FolderImageId
+                    : (_configuration["GoogleDrive:Folder_image"] ?? _configuration["GoogleDrive__Folder_image"]);
+
                 if (string.IsNullOrWhiteSpace(token))
                 {
                     return new StorageTestResponseDto
@@ -843,12 +855,20 @@ public class SystemConfigService : ISystemConfigService
                     };
                 }
 
+                var drive = new GoogleDriveService(
+                    LoggerFactory.Create(b => b.AddConsole()).CreateLogger<GoogleDriveService>(),
+                    token,
+                    folderId,
+                    imageFolderId
+                );
+
+                var ok = await drive.TestConnectionAsync();
                 return new StorageTestResponseDto
                 {
-                    Success = true,
+                    Success = ok,
                     Provider = "GoogleDrive",
-                    Message = "Konfigurasi Google Drive valid dan siap digunakan!",
-                    Details = $"Folder ID Dokumen: {config.GoogleDrive?.FolderId}, Folder ID Gambar: {config.GoogleDrive?.FolderImageId}"
+                    Message = ok ? "Koneksi ke Google Drive API berhasil!" : "Gagal terhubung ke Google Drive API. Periksa Token JSON atau hak akses folder.",
+                    Details = $"Folder ID Dokumen: {folderId}, Folder ID Gambar: {imageFolderId}"
                 };
             }
         }

@@ -9,6 +9,7 @@ using Google.Apis.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using SIPENTA.Api.Services.Interfaces;
 
 namespace SIPENTA.Api.Services.Implementations;
 
@@ -35,30 +36,63 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
     public string ProviderName => "GoogleDrive";
 
     private DriveService? _driveService;
-    private readonly string _folderId;
-    private readonly string? _imageFolderId;
+    private string _folderId = "";
+    private string? _imageFolderId;
+    private string? _lastTokenJson;
+    private readonly IConfiguration? _config;
+    private readonly ISystemConfigService? _configService;
     private readonly ILogger<GoogleDriveService> _logger;
     private static readonly ConcurrentDictionary<string, string> _subfolderCache = new();
     private static readonly SemaphoreSlim _folderLock = new(1, 1);
+    private readonly SemaphoreSlim _initLock = new(1, 1);
 
-    public GoogleDriveService(IConfiguration config, ILogger<GoogleDriveService> logger)
+    public GoogleDriveService(IConfiguration config, ILogger<GoogleDriveService> logger, ISystemConfigService? configService = null)
     {
         _logger = logger;
+        _config = config;
+        _configService = configService;
         
         var tokenJson = config["GoogleDrive:TokenJson"] ?? config["GoogleDrive__TokenJson"];
-        _folderId = config["GoogleDrive:FolderId"] ?? config["GoogleDrive__FolderId"] ?? "";
-        _imageFolderId = config["GoogleDrive:Folder_image"] ?? config["GoogleDrive__Folder_image"];
+        var folderId = config["GoogleDrive:FolderId"] ?? config["GoogleDrive__FolderId"] ?? "";
+        var imageFolderId = config["GoogleDrive:Folder_image"] ?? config["GoogleDrive__Folder_image"];
+
+        InitDriveClient(tokenJson, folderId, imageFolderId);
+    }
+
+    public GoogleDriveService(ILogger<GoogleDriveService> logger, string? tokenJson, string? folderId, string? imageFolderId)
+    {
+        _logger = logger;
+        _config = null;
+        _configService = null;
+
+        InitDriveClient(tokenJson, folderId ?? "", imageFolderId);
+    }
+
+    public static void ClearCache()
+    {
+        _subfolderCache.Clear();
+    }
+
+    private void InitDriveClient(string? tokenJson, string folderId, string? imageFolderId)
+    {
+        _folderId = folderId ?? "";
+        _imageFolderId = imageFolderId;
 
         if (string.IsNullOrEmpty(tokenJson) || string.IsNullOrEmpty(_folderId))
         {
-            _logger.LogWarning("Kredensial GoogleDrive (TokenJson atau FolderId) belum disetel di environment.");
+            _logger.LogWarning("Kredensial GoogleDrive (TokenJson atau FolderId) belum disetel.");
+            return;
+        }
+
+        if (tokenJson == _lastTokenJson && _driveService != null)
+        {
             return;
         }
 
         try
         {
-            tokenJson = tokenJson.Trim('\'');
-            var tokenData = JsonSerializer.Deserialize<GoogleDriveToken>(tokenJson);
+            var cleanedToken = tokenJson.Trim('\'');
+            var tokenData = JsonSerializer.Deserialize<GoogleDriveToken>(cleanedToken);
             if (tokenData == null)
             {
                 _logger.LogWarning("Format GoogleDrive Token JSON tidak valid.");
@@ -95,6 +129,8 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
                 HttpClientInitializer = credential,
                 ApplicationName = "SIPENTA API"
             });
+
+            _lastTokenJson = tokenJson;
         }
         catch (Exception ex)
         {
@@ -102,17 +138,58 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         }
     }
 
+    private async Task SyncDynamicConfigAsync()
+    {
+        if (_configService == null) return;
+
+        await _initLock.WaitAsync();
+        try
+        {
+            var storageConfig = await _configService.GetStorageConfigAsync();
+            var gdConfig = storageConfig.GoogleDrive;
+
+            var tokenJson = !string.IsNullOrWhiteSpace(gdConfig?.TokenJson)
+                ? gdConfig.TokenJson
+                : (_config?["GoogleDrive:TokenJson"] ?? _config?["GoogleDrive__TokenJson"]);
+
+            var folderId = !string.IsNullOrWhiteSpace(gdConfig?.FolderId)
+                ? gdConfig.FolderId
+                : (_config?["GoogleDrive:FolderId"] ?? _config?["GoogleDrive__FolderId"] ?? "");
+
+            var imageFolderId = !string.IsNullOrWhiteSpace(gdConfig?.FolderImageId)
+                ? gdConfig.FolderImageId
+                : (_config?["GoogleDrive:Folder_image"] ?? _config?["GoogleDrive__Folder_image"]);
+
+            if (folderId != _folderId || imageFolderId != _imageFolderId)
+            {
+                _subfolderCache.Clear();
+                _logger.LogInformation("GoogleDrive dynamic config updated: FolderId='{FolderId}', ImageFolderId='{ImageFolderId}' (Subfolder cache cleared).", folderId, imageFolderId);
+            }
+
+            InitDriveClient(tokenJson, folderId, imageFolderId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Gagal sinkronisasi dynamic config dari database untuk GoogleDriveService.");
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
     private DriveService GetClient()
     {
         if (_driveService == null)
         {
-            throw new InvalidOperationException("Kredensial Google Drive belum dikonfigurasi di environment server (GoogleDrive__TokenJson / GoogleDrive__FolderId).");
+            throw new InvalidOperationException("Kredensial Google Drive belum dikonfigurasi (TokenJson / FolderId).");
         }
         return _driveService;
     }
 
     public async Task<string> UploadFileAsync(IFormFile file, string fileName)
     {
+        await SyncDynamicConfigAsync();
         var fileMetadata = new Google.Apis.Drive.v3.Data.File()
         {
             Name = fileName,
@@ -136,6 +213,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 
     public async Task<string> EnsureSubfolderAsync(string subfolderName)
     {
+        await SyncDynamicConfigAsync();
         var baseFolder = !string.IsNullOrEmpty(_imageFolderId) ? _imageFolderId : _folderId;
         return await GetOrCreateSubfolderAsync(baseFolder, subfolderName);
     }
@@ -244,6 +322,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 
     public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string? folderOrPrefix = null)
     {
+        await SyncDynamicConfigAsync();
         var baseFolder = !string.IsNullOrEmpty(_imageFolderId) ? _imageFolderId : _folderId;
         var targetFolder = baseFolder;
 
@@ -282,6 +361,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 
     public async Task DeleteFileAsync(string fileId)
     {
+        await SyncDynamicConfigAsync();
         try
         {
             await GetClient().Files.Delete(fileId).ExecuteAsync();
@@ -295,6 +375,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 
     public async Task<Stream> DownloadFileAsync(string fileId)
     {
+        await SyncDynamicConfigAsync();
         var stream = new MemoryStream();
         var request = GetClient().Files.Get(fileId);
         var progress = await request.DownloadAsync(stream);
@@ -310,6 +391,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
 
     public async Task<bool> TestConnectionAsync()
     {
+        await SyncDynamicConfigAsync();
         try
         {
             if (_driveService == null) return false;
