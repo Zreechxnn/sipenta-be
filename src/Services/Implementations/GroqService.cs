@@ -32,17 +32,17 @@ public class GroqService : IGroqService
         var defaultModel = "openai/gpt-oss-120b";
         var defaultImageModel = "qwen/qwen3.8-27b";
 
-        var primaryKey = configuration["Llm:ApiKey"] ?? string.Empty;
-        var primaryUrl = configuration["Llm:BaseUrl"] ?? defaultBaseUrl;
-        var primaryModel = configuration["Llm:Model"] ?? defaultModel;
-        var primaryImage = configuration["Llm:Image"] ?? configuration["Llm:image"] ?? defaultImageModel;
+        var primaryKey = configuration["Llm:ApiKey"] ?? configuration["Llm:ApiKey1"] ?? configuration["Llm:apikey1"] ?? string.Empty;
+        var primaryUrl = configuration["Llm:BaseUrl"] ?? configuration["Llm:BaseUrl1"] ?? defaultBaseUrl;
+        var primaryModel = configuration["Llm:Model"] ?? configuration["Llm:Model1"] ?? defaultModel;
+        var primaryImage = configuration["Llm:Image"] ?? configuration["Llm:image"] ?? configuration["Llm:Image1"] ?? defaultImageModel;
 
         if (!string.IsNullOrWhiteSpace(primaryKey))
         {
             _fallbackConfigs.Add(new LlmEndpointConfig(primaryKey.Trim(), primaryUrl.Trim(), primaryModel.Trim(), primaryImage.Trim(), "Primary (Llm)"));
         }
 
-        for (int i = 2; i <= 10; i++)
+        for (int i = 2; i <= 20; i++)
         {
             var key = configuration[$"Llm:ApiKey{i}"] ?? configuration[$"Llm:apikey{i}"];
             if (!string.IsNullOrWhiteSpace(key))
@@ -275,7 +275,11 @@ public class GroqService : IGroqService
                     "application/json"
                 );
 
-                using var response = await _httpClient.SendAsync(request, cancellationToken);
+                // Per-endpoint timeout: 30 seconds to prevent hanging on exhausted/slow endpoints
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                linkedCts.CancelAfter(TimeSpan.FromSeconds(30));
+
+                using var response = await _httpClient.SendAsync(request, linkedCts.Token);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -292,14 +296,50 @@ public class GroqService : IGroqService
 
                 using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 using var responseJson = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-                var answer = responseJson.RootElement
-                    .GetProperty("choices")[0]
-                    .GetProperty("message")
-                    .GetProperty("content")
-                    .GetString();
+                
+                string? answer = null;
+                if (responseJson.RootElement.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
+                {
+                    var firstChoice = choices[0];
+                    if (firstChoice.TryGetProperty("message", out var msg))
+                    {
+                        if (msg.TryGetProperty("content", out var contentProp) && contentProp.ValueKind == JsonValueKind.String)
+                        {
+                            answer = contentProp.GetString();
+                        }
 
-                return CleanLlmResponse(answer);
+                        // Support reasoning models where final output or thoughts are in reasoning/reasoning_content
+                        if (string.IsNullOrWhiteSpace(answer))
+                        {
+                            if (msg.TryGetProperty("reasoning", out var reasoningProp) && reasoningProp.ValueKind == JsonValueKind.String)
+                            {
+                                answer = reasoningProp.GetString();
+                            }
+                            else if (msg.TryGetProperty("reasoning_content", out var rcProp) && rcProp.ValueKind == JsonValueKind.String)
+                            {
+                                answer = rcProp.GetString();
+                            }
+                        }
+                    }
+                }
 
+                var cleanResult = CleanLlmResponse(answer);
+                if (string.IsNullOrWhiteSpace(cleanResult))
+                {
+                    var errorMsg = $"[{config.Name}] Endpoint returned empty or unparseable content";
+                    _logger?.LogWarning("LLM {Name} ({Url} - {Model}) returned empty content. Details: {RawAnswer}. Attempting next config...", 
+                        config.Name, config.BaseUrl, selectedModel, answer);
+                    errors.Add(errorMsg);
+                    continue;
+                }
+
+                return cleanResult;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                var errorMsg = $"[{config.Name}] Request timed out after 30s.";
+                _logger?.LogWarning("LLM Request to {Name} ({Url} - {Model}) timed out after 30s. Attempting fallback to next config...", config.Name, config.BaseUrl, selectedModel);
+                errors.Add(errorMsg);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -309,7 +349,7 @@ public class GroqService : IGroqService
             }
         }
 
-        if (errors.Any(e => e.Contains("429") || e.Contains("Rate limit") || e.Contains("rate_limit")))
+        if (errors.Any(e => e.Contains("429") || e.Contains("Rate limit") || e.Contains("rate_limit") || e.Contains("insufficient_quota") || e.Contains("quota")))
         {
             return "Mohon maaf, seluruh kuota layanan AI sedang sibuk atau mencapai batas limit (Rate Limit). Silakan coba beberapa saat lagi.";
         }
