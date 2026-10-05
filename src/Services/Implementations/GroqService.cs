@@ -82,6 +82,7 @@ public class GroqService : IGroqService
         IEnumerable<object> historyMessages, 
         string userMessage, 
         IEnumerable<LlmImageInput>? images, 
+        bool forceVisionModel = false,
         CancellationToken cancellationToken = default)
     {
         var imageList = images?.Where(img => img.Bytes != null && img.Bytes.Length > 0).ToList();
@@ -133,7 +134,7 @@ public class GroqService : IGroqService
                 return visionResult;
             }
 
-            _logger?.LogWarning("Vision LLM completion failed across endpoints ({VisionResult}). Falling back to text-only model...", visionResult);
+            _logger?.LogWarning("Vision LLM completion failed across endpoints ({VisionResult}). Falling back to text model...", visionResult);
         }
 
         var textMessages = new List<object>
@@ -146,7 +147,7 @@ public class GroqService : IGroqService
         }
         textMessages.Add(new { role = "user", content = (object)userMessage });
 
-        return await SendWithFallbackAsync(textMessages, isVision: false, cancellationToken);
+        return await SendWithFallbackAsync(textMessages, isVision: forceVisionModel, cancellationToken);
     }
 
     public async Task<bool> IsLlmConfiguredAndActiveAsync()
@@ -289,8 +290,8 @@ public class GroqService : IGroqService
                     continue;
                 }
 
-                var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
-                var responseJson = JsonDocument.Parse(responseString);
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var responseJson = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 var answer = responseJson.RootElement
                     .GetProperty("choices")[0]
                     .GetProperty("message")
@@ -298,6 +299,7 @@ public class GroqService : IGroqService
                     .GetString();
 
                 return CleanLlmResponse(answer);
+
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

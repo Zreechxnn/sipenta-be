@@ -28,18 +28,7 @@ public class BidangController : ControllerBase
     {
         try
         {
-            var bidangs = await _bidangRepository.GetAllAsync();
-            var dtos = bidangs.Select(b => new BidangDto
-            {
-                Id = b.Id,
-                Nama = b.Nama,
-                Kode = b.Kode,
-                Deskripsi = b.Deskripsi,
-                UserCount = b.Users?.Count ?? 0,
-                DocumentCount = b.Documents?.Count ?? 0,
-                CreatedAt = b.CreatedAt
-            }).ToList();
-
+            var dtos = await _bidangRepository.GetAllDtosAsync();
             return Ok(ApiResponse<List<BidangDto>>.Ok(dtos));
         }
         catch (Exception ex)
@@ -53,20 +42,9 @@ public class BidangController : ControllerBase
     {
         try
         {
-            var b = await _bidangRepository.GetByIdAsync(id);
-            if (b == null)
+            var dto = await _bidangRepository.GetByIdDtoAsync(id);
+            if (dto == null)
                 return NotFound(new ProblemDetails { Status = 404, Title = "Not Found", Detail = "Bidang tidak ditemukan." });
-
-            var dto = new BidangDto
-            {
-                Id = b.Id,
-                Nama = b.Nama,
-                Kode = b.Kode,
-                Deskripsi = b.Deskripsi,
-                UserCount = b.Users?.Count ?? 0,
-                DocumentCount = b.Documents?.Count ?? 0,
-                CreatedAt = b.CreatedAt
-            };
 
             return Ok(ApiResponse<BidangDto>.Ok(dto));
         }
@@ -75,6 +53,7 @@ public class BidangController : ControllerBase
             return BadRequest(ApiResponse<BidangDto>.Gagal(ex.Message));
         }
     }
+
 
     [HttpPost]
     [Authorize(Roles = "admin")]

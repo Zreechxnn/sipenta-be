@@ -167,10 +167,21 @@ public class SystemConfigService : ISystemConfigService
                         }
                     }
 
-                    if (hadUnencryptedKeyInDb)
+                    bool hadLegacyImageModel = false;
+                    foreach (var ep in parsed.Endpoints)
                     {
-                        // Auto-migrate: re-save to ensure inner keys in DB are strictly encrypted
-                        await SaveLlmConfigsAsync(parsed, "System (Auto Encryption)");
+                        if (string.Equals(ep.ImageModel, "qwen/qwen3.6-27b", StringComparison.OrdinalIgnoreCase))
+                        {
+                            ep.ImageModel = "qwen/qwen3.8-27b";
+                            hadLegacyImageModel = true;
+                            _logger.LogInformation("Auto-migrated legacy ImageModel qwen/qwen3.6-27b to qwen/qwen3.8-27b for endpoint {Name}", ep.Name);
+                        }
+                    }
+
+                    if (hadUnencryptedKeyInDb || hadLegacyImageModel)
+                    {
+                        // Auto-migrate: re-save to ensure inner keys in DB are strictly encrypted and legacy models upgraded
+                        await SaveLlmConfigsAsync(parsed, "System (Auto Migration & Encryption)");
                     }
 
                     _cache.Set(LlmCacheKey, parsed, TimeSpan.FromMinutes(5));

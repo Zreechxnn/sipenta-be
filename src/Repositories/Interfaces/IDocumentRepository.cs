@@ -4,8 +4,9 @@ namespace SIPENTA.Api.Repositories.Interfaces;
 
 public interface IDocumentRepository
 {
-    Task<Document?> GetByIdAsync(Guid id);
+    Task<Document?> GetByIdAsync(Guid id, bool asNoTracking = false);
     Task<(IEnumerable<Document>, int)> GetPagedAsync(
+
         int pageNumber,
         int pageSize,
         string? keyword = null,

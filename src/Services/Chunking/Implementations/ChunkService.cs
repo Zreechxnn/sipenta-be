@@ -81,19 +81,25 @@ public class ChunkService : IChunkService
                 throw new Exception("Jumlah chunk adalah 0 (nol). Document requires > 0 chunks.");
             }
 
-            // Generate vector embeddings for newly created chunks
-            foreach (var chunk in chunks)
+            // Generate vector embeddings for newly created chunks in batches
+            var nonEmptyChunks = chunks.Where(c => !string.IsNullOrWhiteSpace(c.Content)).ToList();
+            int batchSize = 32;
+            for (int i = 0; i < nonEmptyChunks.Count; i += batchSize)
             {
-                if (!string.IsNullOrWhiteSpace(chunk.Content))
+                if (cancellationToken.IsCancellationRequested) break;
+                var batch = nonEmptyChunks.Skip(i).Take(batchSize).ToList();
+                var texts = batch.Select(c => c.Content).ToList();
+                try
                 {
-                    try
+                    var vectors = await _embeddingService.GenerateEmbeddingsBatchAsync(texts, cancellationToken);
+                    for (int j = 0; j < batch.Count && j < vectors.Count; j++)
                     {
-                        chunk.Embedding = await _embeddingService.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
+                        batch[j].Embedding = vectors[j];
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to generate embedding for chunk {ChunkIndex} of document {DocumentId}", chunk.ChunkIndex, documentId);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to generate batch embedding for chunks {Start} to {End} of document {DocumentId}", i, i + batch.Count - 1, documentId);
                 }
             }
 
@@ -117,28 +123,33 @@ public class ChunkService : IChunkService
     public async Task ProcessEmbeddingsAsync(CancellationToken cancellationToken = default)
     {
         var unindexedChunks = await _dbContext.DocumentChunks
-            .Where(c => c.Embedding == null)
+            .Where(c => c.Embedding == null && !string.IsNullOrWhiteSpace(c.Content))
             .Take(100)
             .ToListAsync(cancellationToken);
 
         if (!unindexedChunks.Any()) return;
 
-        foreach (var chunk in unindexedChunks)
+        int batchSize = 32;
+        for (int i = 0; i < unindexedChunks.Count; i += batchSize)
         {
             if (cancellationToken.IsCancellationRequested) break;
-            if (!string.IsNullOrWhiteSpace(chunk.Content))
+            var batch = unindexedChunks.Skip(i).Take(batchSize).ToList();
+            var texts = batch.Select(c => c.Content).ToList();
+            try
             {
-                try
+                var vectors = await _embeddingService.GenerateEmbeddingsBatchAsync(texts, cancellationToken);
+                for (int j = 0; j < batch.Count && j < vectors.Count; j++)
                 {
-                    chunk.Embedding = await _embeddingService.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
+                    batch[j].Embedding = vectors[j];
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to generate embedding for chunk {ChunkId}", chunk.Id);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to generate batch embedding during background sync");
             }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
+
 }

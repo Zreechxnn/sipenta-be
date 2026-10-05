@@ -156,6 +156,47 @@ public class AppDbContext : DbContext
             entity.HasKey(s => s.Key);
         });
 
+        // High-Performance Query & Vector Indexes
+        modelBuilder.Entity<Document>(entity =>
+        {
+            entity.HasIndex(d => d.TanggalUpload);
+            entity.HasIndex(d => new { d.BidangId, d.TanggalUpload });
+            entity.HasIndex(d => new { d.UserId, d.TanggalUpload });
+            entity.HasIndex(d => d.Status);
+        });
+
+        modelBuilder.Entity<DocumentChunk>(entity =>
+        {
+            entity.HasIndex(c => new { c.DocumentId, c.ChunkIndex });
+            if (Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
+            {
+                entity.HasIndex(c => c.Embedding)
+                    .HasMethod("hnsw")
+                    .HasOperators("vector_cosine_ops");
+            }
+        });
+
+        modelBuilder.Entity<DocumentImage>(entity =>
+        {
+            entity.HasIndex(di => new { di.DocumentId, di.PageNumber });
+        });
+
+        modelBuilder.Entity<ChatMessage>(entity =>
+        {
+            entity.HasIndex(cm => new { cm.ChatSessionId, cm.CreatedAt });
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasIndex(r => new { r.UserId, r.ExpiresAt, r.RevokedAt });
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasIndex(u => new { u.RoleId, u.IsApproved });
+        });
+
+
         // Seeding Data
         SeedData(modelBuilder);
     }

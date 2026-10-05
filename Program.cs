@@ -29,6 +29,7 @@ builder.Host.UseSerilog();
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
     serverOptions.Limits.MaxRequestBodySize = 524_288_000;
+    serverOptions.AddServerHeader = false;
 });
 
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
@@ -46,10 +47,11 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("JwtOpti
 builder.Services.Configure<GoogleOptions>(builder.Configuration.GetSection("Google"));
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContextPool<AppDbContext>(options =>
 {
     options.UseNpgsql(connectionString, o => o.UseVector());
 });
+
 
 MapsterConfig.RegisterMappings();
 builder.Services.AddMapster();
@@ -236,8 +238,41 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IPdfImageExtractor, PdfImageExtractor>();
 builder.Services.AddScoped<IDocumentDetectionService, DocumentDetectionService>();
 builder.Services.AddScoped<IOcrProvider, TesseractOcrProvider>();
-builder.Services.AddHttpClient<IGroqService, GroqService>();
-builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>();
+builder.Services.AddHttpClient<IGroqService, GroqService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+        KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+        KeepAlivePingTimeout = TimeSpan.FromSeconds(15),
+        EnableMultipleHttp2Connections = true
+    });
+
+builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+        KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+        KeepAlivePingTimeout = TimeSpan.FromSeconds(15),
+        EnableMultipleHttp2Connections = true
+    });
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+});
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = System.IO.Compression.CompressionLevel.Fastest;
+});
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(options =>
+{
+    options.Level = System.IO.Compression.CompressionLevel.Fastest;
+});
+
 builder.Services.AddSingleton<IDocumentProcessingQueue, DocumentProcessingQueue>();
 builder.Services.AddHostedService<DocumentProcessingService>();
 builder.Services.AddHostedService<TokenCleanupBackgroundService>();
@@ -288,10 +323,16 @@ if (!Directory.Exists(uploadsDir))
     Directory.CreateDirectory(uploadsDir);
 }
 
+app.UseResponseCompression();
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
-    RequestPath = "/uploads/images"
+    RequestPath = "/uploads/images",
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.CacheControl = "public,max-age=604800,immutable";
+    }
 });
 
 app.UseForwardedHeaders(new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
@@ -300,6 +341,7 @@ app.UseForwardedHeaders(new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
 });
 
 app.UseCors("AllowAll");
+
 
 if (!app.Environment.IsDevelopment())
 {

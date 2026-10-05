@@ -51,10 +51,22 @@ public class ChatController : ControllerBase
     }
 
     [HttpGet("Models")]
-    public IActionResult GetModels()
+    public async Task<IActionResult> GetModels([FromServices] ISystemConfigService configService)
     {
         var textModel = _configuration["Llm:Model"] ?? _configuration["Llm:Model2"] ?? "openai/gpt-oss-120b";
-        var visionModel = _configuration["Llm:Image"] ?? _configuration["Llm:image2"] ?? "qwen/qwen3.6-27b";
+        var visionModel = _configuration["Llm:Image"] ?? _configuration["Llm:image2"] ?? "qwen/qwen3.8-27b";
+
+        try
+        {
+            var dynamicConfigs = await configService.GetLlmConfigsAsync();
+            var activeEndpoint = dynamicConfigs?.Endpoints?.FirstOrDefault(e => e.IsActive && !string.IsNullOrWhiteSpace(e.ApiKey));
+            if (activeEndpoint != null)
+            {
+                if (!string.IsNullOrWhiteSpace(activeEndpoint.Model)) textModel = activeEndpoint.Model;
+                if (!string.IsNullOrWhiteSpace(activeEndpoint.ImageModel)) visionModel = activeEndpoint.ImageModel;
+            }
+        }
+        catch { }
 
         var models = new[]
         {
@@ -91,6 +103,7 @@ public class ChatController : ControllerBase
         }, "Berhasil"));
     }
 
+
     [HttpGet("Sessions")]
     public async Task<IActionResult> GetSessions()
     {
@@ -99,6 +112,7 @@ public class ChatController : ControllerBase
             return Unauthorized(ApiResponse<object>.Gagal("User not found"));
 
         var sessions = await _dbContext.ChatSessions
+            .AsNoTracking()
             .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new {
@@ -119,8 +133,10 @@ public class ChatController : ControllerBase
             return Unauthorized(ApiResponse<object>.Gagal("User not found"));
 
         var session = await _dbContext.ChatSessions
+            .AsNoTracking()
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId);
+
 
         if (session == null)
             return NotFound(ApiResponse<object>.Gagal("Sesi tidak ditemukan"));
@@ -256,7 +272,7 @@ PANDUAN:
                 searchQuery = request.Message;
             }
             
-            var dbUser = await _dbContext.Users.Include(u => u.Role).Include(u => u.Bidang).FirstOrDefaultAsync(u => u.Id == userId);
+            var dbUser = await _dbContext.Users.AsNoTracking().Include(u => u.Role).Include(u => u.Bidang).FirstOrDefaultAsync(u => u.Id == userId);
             if (dbUser == null) return Unauthorized(ApiResponse<object>.Gagal("Pengguna tidak ditemukan."));
 
             var isSuperAdmin = dbUser.Role.Name.Equals("admin", StringComparison.OrdinalIgnoreCase);
@@ -273,9 +289,11 @@ PANDUAN:
             var docIds = results.Where(chunk => chunk.Document != null).Select(chunk => chunk.DocumentId).Distinct().ToList();
 
             var allDocImages = await _dbContext.DocumentImages
+                .AsNoTracking()
                 .Where(di => docIds.Contains(di.DocumentId))
                 .OrderBy(di => di.PageNumber)
                 .ToListAsync();
+
 
             var chunkContents = results.Select(c => c.Content.ToLowerInvariant()).ToList();
 
@@ -361,7 +379,7 @@ PANDUAN:
                 {
                     if (!string.IsNullOrEmpty(msg.Content))
                     {
-                        var matches = System.Text.RegularExpressions.Regex.Matches(msg.Content, @"/api/Documents/images/([a-zA-Z0-9_\-]+)");
+                        var matches = System.Text.RegularExpressions.Regex.Matches(msg.Content, @"/api/documents/images/([a-zA-Z0-9_\-]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                         foreach (System.Text.RegularExpressions.Match m in matches)
                         {
                             var fid = m.Groups[1].Value;
@@ -373,7 +391,7 @@ PANDUAN:
                     }
                     if (!string.IsNullOrEmpty(msg.Sources))
                     {
-                        var matches = System.Text.RegularExpressions.Regex.Matches(msg.Sources, @"/api/Documents/images/([a-zA-Z0-9_\-]+)");
+                        var matches = System.Text.RegularExpressions.Regex.Matches(msg.Sources, @"/api/documents/images/([a-zA-Z0-9_\-]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                         foreach (System.Text.RegularExpressions.Match m in matches)
                         {
                             var fid = m.Groups[1].Value;
@@ -414,7 +432,9 @@ PANDUAN:
                 || queryLower.Contains("lagi apa")
                 || queryLower.Contains("ada berapa");
 
-            if (historyImageFileIds.Any() && (isImageFollowUp || !relevantImages.Any()))
+            var isVisionModeExplicit = string.Equals(request.ModelMode, "vision", StringComparison.OrdinalIgnoreCase);
+
+            if (historyImageFileIds.Any() && (isImageFollowUp || isVisionModeExplicit || !relevantImages.Any()))
             {
                 var distinctHistoryIds = historyImageFileIds.Take(3).ToList();
                 var matchedHistoryImages = new List<DocumentImage>();
@@ -457,11 +477,25 @@ PANDUAN:
                         byte[]? bytes = null;
                         var displayPath = img.FilePath ?? string.Empty;
 
-                        if (displayPath.StartsWith("https://drive.google.com/uc?id=") || displayPath.StartsWith("/api/Documents/images/"))
+                        var isDriveUrl = displayPath.StartsWith("https://drive.google.com/uc?id=", StringComparison.OrdinalIgnoreCase);
+                        var isProxyUrl = displayPath.StartsWith("/api/Documents/images/", StringComparison.OrdinalIgnoreCase) || 
+                                         displayPath.StartsWith("/api/documents/images/", StringComparison.OrdinalIgnoreCase);
+
+                        if (isDriveUrl || isProxyUrl)
                         {
-                            var fileId = displayPath.StartsWith("https://drive.google.com/uc?id=")
-                                ? displayPath.Replace("https://drive.google.com/uc?id=", "")
-                                : displayPath.Replace("/api/Documents/images/", "");
+                            var fileId = displayPath;
+                            if (isDriveUrl)
+                            {
+                                fileId = fileId.Substring("https://drive.google.com/uc?id=".Length);
+                            }
+                            else
+                            {
+                                var imgIdx = fileId.IndexOf("/images/", StringComparison.OrdinalIgnoreCase);
+                                if (imgIdx >= 0)
+                                {
+                                    fileId = fileId.Substring(imgIdx + "/images/".Length);
+                                }
+                            }
 
                             var cacheDir = Path.Combine(Path.GetTempPath(), "sipenta_image_cache");
                             var safeFileId = string.Join("_", fileId.Split(Path.GetInvalidFileNameChars()));
@@ -714,7 +748,7 @@ KONTEKS DOKUMEN:
             }
 
             // 6. Call LLM with Vision support
-            var answer = await _groqService.GetChatCompletionWithVisionAsync(systemPrompt, llmHistory, request.Message, finalVisionImages);
+            var answer = await _groqService.GetChatCompletionWithVisionAsync(systemPrompt, llmHistory, request.Message, finalVisionImages, isVisionModeExplicit);
 
             // Normalize any direct Google Drive URLs in answer to backend proxy URL /api/Documents/images/{fileId}
             if (!string.IsNullOrWhiteSpace(answer))
