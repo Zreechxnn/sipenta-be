@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SIPENTA.Api.DTOs;
 using SIPENTA.Api.Services.Interfaces;
@@ -8,6 +9,7 @@ namespace SIPENTA.Api.Services.Implementations;
 public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
 {
     private readonly ISystemConfigService _configService;
+    private readonly IConfiguration _configuration;
     private readonly GoogleDriveService _googleDriveService;
     private readonly HttpClient _httpClient;
     private readonly ILoggerFactory _loggerFactory;
@@ -17,16 +19,40 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
 
     public CloudStorageManager(
         ISystemConfigService configService,
+        IConfiguration configuration,
         GoogleDriveService googleDriveService,
         HttpClient httpClient,
         ILoggerFactory loggerFactory,
         ILogger<CloudStorageManager> logger)
     {
         _configService = configService;
+        _configuration = configuration;
         _googleDriveService = googleDriveService;
         _httpClient = httpClient;
         _loggerFactory = loggerFactory;
         _logger = logger;
+    }
+
+    private ICloudStorageService ResolveGoogleDriveProvider(StorageConfigDto config)
+    {
+        var tokenJson = !string.IsNullOrWhiteSpace(config.GoogleDrive?.TokenJson)
+            ? config.GoogleDrive.TokenJson
+            : (_configuration["GoogleDrive:TokenJson"] ?? _configuration["GoogleDrive__TokenJson"]);
+
+        var folderId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.FolderId)
+            ? config.GoogleDrive.FolderId
+            : (_configuration["GoogleDrive:FolderId"] ?? _configuration["GoogleDrive__FolderId"] ?? string.Empty);
+
+        var imageFolderId = !string.IsNullOrWhiteSpace(config.GoogleDrive?.FolderImageId)
+            ? config.GoogleDrive.FolderImageId
+            : (_configuration["GoogleDrive:Folder_image"] ?? _configuration["GoogleDrive__Folder_image"]);
+
+        return new GoogleDriveService(
+            _loggerFactory.CreateLogger<GoogleDriveService>(),
+            tokenJson,
+            folderId,
+            imageFolderId
+        );
     }
 
     private async Task<ICloudStorageService> GetActiveProviderAsync()
@@ -91,7 +117,7 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
 
             case "googledrive":
             default:
-                return _googleDriveService;
+                return ResolveGoogleDriveProvider(config);
         }
     }
 
@@ -99,7 +125,8 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
     {
         if (string.IsNullOrWhiteSpace(fileIdOrPath))
         {
-            return _googleDriveService;
+            var conf = await _configService.GetStorageConfigAsync();
+            return ResolveGoogleDriveProvider(conf);
         }
 
         if (fileIdOrPath.StartsWith("local:", StringComparison.OrdinalIgnoreCase))
@@ -162,7 +189,8 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
         }
 
         // Default to Google Drive for existing alphanumeric file IDs
-        return _googleDriveService;
+        var driveConfig = await _configService.GetStorageConfigAsync();
+        return ResolveGoogleDriveProvider(driveConfig);
     }
 
     public async Task<string> UploadFileAsync(IFormFile file, string fileName)
@@ -177,6 +205,12 @@ public class CloudStorageManager : IGoogleDriveService, ICloudStorageService
         var provider = await GetActiveProviderAsync();
         _logger.LogInformation("Uploading bytes '{FileName}' via active provider '{ProviderName}'", fileName, provider.ProviderName);
         return await provider.UploadFileBytesAsync(fileBytes, fileName, contentType, folderOrPrefix);
+    }
+
+    public async Task<string> EnsureSubfolderAsync(string subfolderName)
+    {
+        var provider = await GetActiveProviderAsync();
+        return await provider.EnsureSubfolderAsync(subfolderName);
     }
 
     public async Task DeleteFileAsync(string fileIdOrPath)

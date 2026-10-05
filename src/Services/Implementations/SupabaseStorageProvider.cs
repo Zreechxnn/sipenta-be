@@ -138,6 +138,15 @@ public class SupabaseStorageProvider : ICloudStorageService
         return $"supabase:{_bucket}/{objectKey}";
     }
 
+    public Task<string> EnsureSubfolderAsync(string subfolderName)
+    {
+        var clean = subfolderName.Trim().Trim('/');
+        var prefix = clean.StartsWith(_imagePrefix, StringComparison.OrdinalIgnoreCase)
+            ? clean
+            : $"{_imagePrefix}/{clean}";
+        return Task.FromResult(prefix);
+    }
+
     public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string? folderOrPrefix = null)
     {
         await EnsureBucketExistsAsync();

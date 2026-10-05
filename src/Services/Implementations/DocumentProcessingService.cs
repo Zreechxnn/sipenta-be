@@ -207,12 +207,15 @@ public class DocumentProcessingService : BackgroundService
                                 ? document.Nama.Trim() 
                                 : Path.GetFileNameWithoutExtension(document.NamaFile ?? "Dokumen");
 
+                            // Pastikan 1 subfolder tunggal dibuat/diambil 1 KALI saja sebelum upload gambar
+                            var targetFolder = await driveService.EnsureSubfolderAsync(docSubfolder);
+
                             var uploadTasks = extractedImages.Select(async (img, index) => 
                             {
                                 var imgIndex = index + 1;
                                 var imgFileName = $"p{img.PageNumber}_{imgIndex}_{Guid.NewGuid():N}.{img.Extension}";
                                 
-                                var driveFileId = await driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType, docSubfolder);
+                                var driveFileId = await driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType, targetFolder);
                                 var driveUrl = $"/api/Documents/images/{driveFileId}";
 
                                 return new DocumentImage
@@ -253,7 +256,19 @@ public class DocumentProcessingService : BackgroundService
                 var chunkService = scope.ServiceProvider.GetRequiredService<IChunkService>();
                 await chunkService.ProcessChunksAsync(document.Id, null, stoppingToken);
 
-                document = await repository.GetByIdAsync(documentId) ?? document;
+                var reloadedDoc = await repository.GetByIdAsync(documentId);
+                if (reloadedDoc != null)
+                {
+                    if (string.IsNullOrWhiteSpace(reloadedDoc.NamaTenagaAhli) && !string.IsNullOrWhiteSpace(document.NamaTenagaAhli))
+                        reloadedDoc.NamaTenagaAhli = document.NamaTenagaAhli;
+                    if ((string.IsNullOrWhiteSpace(reloadedDoc.Nama) || reloadedDoc.Nama == reloadedDoc.NamaFile) && !string.IsNullOrWhiteSpace(document.Nama))
+                        reloadedDoc.Nama = document.Nama;
+                    if (string.IsNullOrWhiteSpace(reloadedDoc.JenisDokumen) && !string.IsNullOrWhiteSpace(document.JenisDokumen))
+                        reloadedDoc.JenisDokumen = document.JenisDokumen;
+                    if (string.IsNullOrWhiteSpace(reloadedDoc.PeriodeLaporan) && !string.IsNullOrWhiteSpace(document.PeriodeLaporan))
+                        reloadedDoc.PeriodeLaporan = document.PeriodeLaporan;
+                    document = reloadedDoc;
+                }
 
                 if (string.IsNullOrWhiteSpace(document.NamaTenagaAhli)) 
                     document.NamaTenagaAhli = "-";
@@ -371,20 +386,45 @@ Jika ada data yang tidak ditemukan, beri string kosong """".
 
             if (!string.IsNullOrWhiteSpace(result))
             {
+                // If the result is an error message from GroqService, don't attempt to parse it as JSON
+                if (result.StartsWith("Mohon maaf,", StringComparison.OrdinalIgnoreCase) || 
+                    result.StartsWith("Terjadi kesalahan", StringComparison.OrdinalIgnoreCase) || 
+                    result.StartsWith("Llm API Key is not", StringComparison.OrdinalIgnoreCase) || 
+                    result.StartsWith("Layanan asisten AI", StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogWarning("LLM Metadata extraction aborted due to service error: {ErrorResult}", result);
+                    return;
+                }
+
                 var cleanJson = result.Trim();
-                if (cleanJson.StartsWith("```json"))
+                if (cleanJson.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
                 {
                     cleanJson = cleanJson.Substring(7);
-                    if (cleanJson.EndsWith("```")) cleanJson = cleanJson.Substring(0, cleanJson.Length - 3);
                 }
                 else if (cleanJson.StartsWith("```"))
                 {
                     cleanJson = cleanJson.Substring(3);
-                    if (cleanJson.EndsWith("```")) cleanJson = cleanJson.Substring(0, cleanJson.Length - 3);
+                }
+                if (cleanJson.EndsWith("```"))
+                {
+                    cleanJson = cleanJson.Substring(0, cleanJson.Length - 3);
                 }
                 cleanJson = cleanJson.Trim();
 
-                var jsonDoc = System.Text.Json.JsonDocument.Parse(cleanJson);
+                // Robust extraction: Locate first '{' and last '}' to strip any conversational preambles
+                int firstBrace = cleanJson.IndexOf('{');
+                int lastBrace = cleanJson.LastIndexOf('}');
+                if (firstBrace >= 0 && lastBrace > firstBrace)
+                {
+                    cleanJson = cleanJson.Substring(firstBrace, lastBrace - firstBrace + 1);
+                }
+                else
+                {
+                    logger.LogWarning("LLM response for document {DocumentId} did not contain a valid JSON object: {Result}", document.Id, result);
+                    return;
+                }
+
+                using var jsonDoc = System.Text.Json.JsonDocument.Parse(cleanJson);
                 var root = jsonDoc.RootElement;
 
                 var nama = root.TryGetProperty("namaTenagaAhli", out var namaProp) ? namaProp.GetString() : null;
@@ -421,7 +461,19 @@ Jika ada data yang tidak ditemukan, beri string kosong """".
 
                 if (modified)
                 {
-                    logger.LogInformation("Successfully updated metadata via LLM for document {DocumentId}", document.Id);
+                    var repository = serviceProvider.GetRequiredService<IDocumentRepository>();
+                    await repository.UpdateAsync(document);
+                    logger.LogInformation("Successfully updated and saved metadata via LLM for document {DocumentId}: Nama={Nama}, TenagaAhli={Ahli}, Jenis={Jenis}, Periode={Periode}", 
+                        document.Id, document.Nama, document.NamaTenagaAhli, document.JenisDokumen, document.PeriodeLaporan);
+
+                    try
+                    {
+                        await _hubContext.Clients.All.SendAsync("DocumentUpdated", MapToDtoPayload(document));
+                    }
+                    catch (Exception hubEx)
+                    {
+                        logger.LogWarning(hubEx, "Failed to broadcast SignalR update after LLM metadata extraction for document {DocumentId}", document.Id);
+                    }
                 }
             }
         }
