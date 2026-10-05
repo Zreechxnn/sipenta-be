@@ -195,22 +195,9 @@ public class DocumentService : IDocumentService
         if (document == null)
             throw new KeyNotFoundException("Dokumen tidak ditemukan.");
 
-        // Ambil daftar seluruh gambar yang terhubung ke dokumen ini sebelum data di database dihapus
-        var images = await _dbContext.DocumentImages
-            .Where(di => di.DocumentId == id)
-            .ToListAsync();
-
-        var imagePathsToDelete = images
-            .Select(img => img.FilePath)
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(ExtractRawStorageIdentifier)
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Distinct()
-            .ToList();
-
         await _repository.ExecuteInTransactionAsync(async () =>
         {
-            // 1. Hapus record dokumen di database (cascade delete otomatis menghapus tabel relasi di DB)
+            // 1. Hapus record dokumen di database (cascade delete otomatis menghapus tabel relasi di DB: DocumentImages, DocumentChunks, dll.)
             await _repository.DeleteAsync(document);
 
             // 2. Hapus berkas dokumen utama dari penyimpanan (Cloud / Local Storage)
@@ -227,35 +214,7 @@ public class DocumentService : IDocumentService
                 }
             }
 
-            // 3. Hapus SEMUA berkas gambar yang terhubung ke dokumen ini dari penyimpanan
-            foreach (var imgPath in imagePathsToDelete)
-            {
-                try
-                {
-                    await _driveService.DeleteFileAsync(imgPath);
-                    _logger.LogInformation("Berhasil menghapus gambar terhubung '{ImagePath}' untuk dokumen {DocumentId} dari storage.", imgPath, id);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Gagal menghapus berkas gambar terhubung '{ImagePath}' dari storage.", imgPath);
-                }
-
-                // 4. Bersihkan file cache disk lokal jika ada
-                try
-                {
-                    var cacheDir = Path.Combine(Path.GetTempPath(), "sipenta_image_cache");
-                    var safeFileId = string.Join("_", imgPath.Split(Path.GetInvalidFileNameChars()));
-                    var cacheFilePath = Path.Combine(cacheDir, $"{safeFileId}.bin");
-                    if (File.Exists(cacheFilePath))
-                    {
-                        File.Delete(cacheFilePath);
-                    }
-                }
-                catch
-                {
-                    // Abaikan kesalahan pembersihan cache lokal
-                }
-            }
+            // Catatan performa & kuota GCP: Berkas gambar ekstraksi sengaja tidak dihapus dari storage untuk memastikan proses penghapusan instan dan menghemat kredit API.
         });
     }
 
@@ -645,22 +604,21 @@ public class DocumentService : IDocumentService
         if (extractedImages.Any())
         {
             var oldImages = await _dbContext.DocumentImages.Where(di => di.DocumentId == document.Id).ToListAsync();
-            foreach (var oldImg in oldImages)
+            if (oldImages.Count > 0)
             {
-                var cleanPath = ExtractRawStorageIdentifier(oldImg.FilePath);
-                if (!string.IsNullOrWhiteSpace(cleanPath))
-                {
-                    try { await _driveService.DeleteFileAsync(cleanPath); } catch { }
-                }
+                _dbContext.DocumentImages.RemoveRange(oldImages);
             }
-            _dbContext.DocumentImages.RemoveRange(oldImages);
+
+            var docSubfolder = !string.IsNullOrWhiteSpace(document.Nama) 
+                ? document.Nama.Trim() 
+                : Path.GetFileNameWithoutExtension(document.NamaFile ?? "Dokumen");
 
             int imgIndex = 1;
             foreach (var img in extractedImages)
             {
                 var imgFileName = $"p{img.PageNumber}_{imgIndex}_{Guid.NewGuid():N}.{img.Extension}";
                 
-                var driveFileId = await _driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType);
+                var driveFileId = await _driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType, docSubfolder);
                 var driveUrl = $"/api/Documents/images/{driveFileId}";
 
                 var docImage = new DocumentImage

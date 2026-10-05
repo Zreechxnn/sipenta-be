@@ -198,27 +198,21 @@ public class DocumentProcessingService : BackgroundService
                         if (extractedImages.Any())
                         {
                             var oldImages = await dbContext.DocumentImages.Where(di => di.DocumentId == document.Id).ToListAsync(stoppingToken);
-                            foreach (var oldImg in oldImages)
+                            if (oldImages.Count > 0)
                             {
-                                var rawPath = oldImg.FilePath;
-                                if (rawPath.StartsWith("/api/Documents/images/", StringComparison.OrdinalIgnoreCase))
-                                    rawPath = rawPath.Substring("/api/Documents/images/".Length);
-                                else if (rawPath.StartsWith("/api/documents/images/", StringComparison.OrdinalIgnoreCase))
-                                    rawPath = rawPath.Substring("/api/documents/images/".Length);
-
-                                if (!string.IsNullOrWhiteSpace(rawPath))
-                                {
-                                    try { await driveService.DeleteFileAsync(rawPath.TrimStart('/')); } catch { }
-                                }
+                                dbContext.DocumentImages.RemoveRange(oldImages);
                             }
-                            dbContext.DocumentImages.RemoveRange(oldImages);
+
+                            var docSubfolder = !string.IsNullOrWhiteSpace(document.Nama) 
+                                ? document.Nama.Trim() 
+                                : Path.GetFileNameWithoutExtension(document.NamaFile ?? "Dokumen");
 
                             var uploadTasks = extractedImages.Select(async (img, index) => 
                             {
                                 var imgIndex = index + 1;
                                 var imgFileName = $"p{img.PageNumber}_{imgIndex}_{Guid.NewGuid():N}.{img.Extension}";
                                 
-                                var driveFileId = await driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType);
+                                var driveFileId = await driveService.UploadFileBytesAsync(img.ImageBytes, imgFileName, img.MimeType, docSubfolder);
                                 var driveUrl = $"/api/Documents/images/{driveFileId}";
 
                                 return new DocumentImage

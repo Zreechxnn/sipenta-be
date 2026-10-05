@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Google.Apis.Auth.OAuth2;
@@ -37,6 +38,7 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
     private readonly string _folderId;
     private readonly string? _imageFolderId;
     private readonly ILogger<GoogleDriveService> _logger;
+    private readonly ConcurrentDictionary<string, string> _subfolderCache = new();
 
     public GoogleDriveService(IConfiguration config, ILogger<GoogleDriveService> logger)
     {
@@ -131,10 +133,67 @@ public class GoogleDriveService : Interfaces.IGoogleDriveService
         return fileResult.Id;
     }
 
-    public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string? folderId = null)
+    public async Task<string> GetOrCreateSubfolderAsync(string parentFolderId, string folderName)
     {
-        var targetFolder = !string.IsNullOrEmpty(folderId) ? folderId : 
-                          (!string.IsNullOrEmpty(_imageFolderId) ? _imageFolderId : _folderId);
+        if (string.IsNullOrWhiteSpace(folderName)) return parentFolderId;
+        
+        var safeFolderName = folderName.Trim().Trim('/', '\\');
+        if (string.IsNullOrEmpty(safeFolderName)) return parentFolderId;
+
+        var cacheKey = $"{parentFolderId}:{safeFolderName}";
+        if (_subfolderCache.TryGetValue(cacheKey, out var cachedId))
+        {
+            return cachedId;
+        }
+
+        try
+        {
+            var client = GetClient();
+            var listRequest = client.Files.List();
+            var escapedName = safeFolderName.Replace("'", "\\'");
+            listRequest.Q = $"mimeType = 'application/vnd.google-apps.folder' and name = '{escapedName}' and '{parentFolderId}' in parents and trashed = false";
+            listRequest.Fields = "files(id, name)";
+            listRequest.PageSize = 1;
+
+            var listResult = await listRequest.ExecuteAsync();
+            var existingFolder = listResult.Files?.FirstOrDefault();
+            if (existingFolder != null && !string.IsNullOrEmpty(existingFolder.Id))
+            {
+                _subfolderCache[cacheKey] = existingFolder.Id;
+                return existingFolder.Id;
+            }
+
+            var folderMetadata = new Google.Apis.Drive.v3.Data.File
+            {
+                Name = safeFolderName,
+                MimeType = "application/vnd.google-apps.folder",
+                Parents = new List<string> { parentFolderId }
+            };
+
+            var createRequest = client.Files.Create(folderMetadata);
+            createRequest.Fields = "id";
+            var createdFolder = await createRequest.ExecuteAsync();
+
+            _subfolderCache[cacheKey] = createdFolder.Id;
+            _logger.LogInformation("Berhasil membuat subfolder '{FolderName}' ({FolderId}) di Google Drive dalam parent {ParentId}", safeFolderName, createdFolder.Id, parentFolderId);
+            return createdFolder.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Gagal mendapatkan atau membuat subfolder '{FolderName}' di Google Drive. Menggunakan parent folder default.", safeFolderName);
+            return parentFolderId;
+        }
+    }
+
+    public async Task<string> UploadFileBytesAsync(byte[] fileBytes, string fileName, string contentType, string? folderOrPrefix = null)
+    {
+        var baseFolder = !string.IsNullOrEmpty(_imageFolderId) ? _imageFolderId : _folderId;
+        var targetFolder = baseFolder;
+
+        if (!string.IsNullOrWhiteSpace(folderOrPrefix))
+        {
+            targetFolder = await GetOrCreateSubfolderAsync(baseFolder, folderOrPrefix);
+        }
                           
         var fileMetadata = new Google.Apis.Drive.v3.Data.File()
         {

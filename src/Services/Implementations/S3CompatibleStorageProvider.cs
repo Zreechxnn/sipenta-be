@@ -117,7 +117,18 @@ public class S3CompatibleStorageProvider : ICloudStorageService, IDisposable
         }
 
         var sanitized = Path.GetFileName(fileName);
-        var prefix = !string.IsNullOrWhiteSpace(folderOrPrefix) ? folderOrPrefix.Trim('/') : _imagePrefix;
+        string prefix;
+        if (!string.IsNullOrWhiteSpace(folderOrPrefix))
+        {
+            var clean = folderOrPrefix.Trim().Trim('/');
+            prefix = clean.StartsWith(_imagePrefix, StringComparison.OrdinalIgnoreCase)
+                ? clean
+                : $"{_imagePrefix}/{clean}";
+        }
+        else
+        {
+            prefix = _imagePrefix;
+        }
         var objectKey = $"{prefix}/{Guid.NewGuid():N}_{sanitized}";
 
         using var stream = new MemoryStream(fileBytes);
